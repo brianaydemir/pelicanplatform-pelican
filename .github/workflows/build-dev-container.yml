@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-dev-image:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
