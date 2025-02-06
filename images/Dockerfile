@@ -191,7 +191,7 @@ RUN groupadd -g 10940 xrootd \
 # We need to pin the install for many of the RPMs to "Koji" until all of
 # Pelican's patches are ingested into the OSG repositories.
 ARG XROOTD_VERSION="5.7.2"
-ARG XROOTD_RELEASE="1.4.purge.osg${OSG_SERIES}.${BASE_OS}"
+ARG XROOTD_RELEASE="1.5.purge.osg${OSG_SERIES}.${BASE_OS}"
 ARG KOJIHUB_BASE_URL="https://kojihub2000.chtc.wisc.edu/kojifiles/packages/xrootd/${XROOTD_VERSION}/${XROOTD_RELEASE}"
 
 # The packages from Koji need to be installed in a single dnf command in
