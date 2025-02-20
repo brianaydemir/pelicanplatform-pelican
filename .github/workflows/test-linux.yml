@@ -31,6 +31,10 @@ jobs:
         # Do fetch depth 0 here because otherwise GoReleaser might not work properly:
         # https://goreleaser.com/ci/actions/?h=tag#workflow
         fetch-depth: 0
+    - name: Fetch tags
+      run: |
+        git config --global --add safe.directory /__w/pelican/pelican
+        git fetch --force --tags
     - uses: actions/setup-node@v4
       with:
         node-version: 20
