@@ -165,6 +165,8 @@ func TestHandleCLIExecutableAlias(t *testing.T) {
 			cmd := exec.Command("go", "build", "-o", "pelican", ".")
 			err := cmd.Run()
 			if err != nil {
+				output, _ := cmd.CombinedOutput()
+				t.Log(string(output))
 				t.Fatal(err, "Error copying the binary to pelican")
 			}
 			defer os.Remove("pelican") // Clean up the test binary when done.
