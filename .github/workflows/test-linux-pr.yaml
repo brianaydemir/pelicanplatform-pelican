@@ -7,11 +7,33 @@ on:
       - dispatch-build
   workflow_dispatch:
 
-# On a pull request, we cannot build and push a newer image in which to run
-# the tests. Thus, we use the most recent container image that was built.
-
 jobs:
+
+  # Determine whether any files have changed that would require us to
+  # rebuild the `pelican-test` image before running the test suite.
+
+  changed-files:
+    outputs:
+      any-changed: ${{ steps.changed_files.outputs.any_changed }}
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get changed files
+        id: changed_files
+        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62  # v47
+        with:
+          files: |
+            images/Dockerfile
+
+  # On a pull request, we cannot build and push a newer image in which to run
+  # the tests. Thus, we use the most recent container image that was built.
+
   test-linux-pull-request:
+    needs: [changed-files]
+    if: ${{ needs.changed-files.outputs.any-changed == 'false' || github.event_name != 'pull_request' }}
     uses: ./.github/workflows/test-linux.yml
     with:
       image: hub.opensciencegrid.org/pelican_platform/pelican-test:latest-itb
