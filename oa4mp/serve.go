@@ -375,7 +375,7 @@ func ConfigureOA4MP() (launcher daemon.Launcher, err error) {
 	}
 
 	// Ensure the OA4MP storage directory exists and has correct permissions and ownership
-	OA4MPStoragePath := "/opt/scitokens-server/var/storage"
+	OA4MPStoragePath := filepath.Join(param.Issuer_ScitokensServerLocation.GetString(), "var", "storage")
 
 	if err = os.Chmod(OA4MPStoragePath, 0700); err != nil {
 		if os.IsNotExist(err) {
