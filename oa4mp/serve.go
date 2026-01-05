@@ -344,8 +344,16 @@ func ConfigureOA4MP() (launcher daemon.Launcher, err error) {
 		UserAuthzTemplates:      userAuthzTemplates,
 	}
 
-	varQdlScitokensPath := filepath.Join(param.Issuer_ScitokensServerLocation.GetString(), "var",
-		"qdl", "scitokens")
+	user, err := config.GetOA4MPUser()
+	if err != nil {
+		return
+	}
+
+	varQdlScitokensPath := filepath.Join(param.Issuer_ScitokensServerLocation.GetString(), "var", "qdl", "scitokens")
+	err = config.MkdirAll(varQdlScitokensPath, 0o755, user.Uid, user.Gid)
+	if err != nil {
+		return
+	}
 
 	err = writeOA4MPConfig(oconf, filepath.Join(etcPath, "server-config.xml"), serverConfigTmpl)
 	if err != nil {
@@ -359,11 +367,6 @@ func ConfigureOA4MP() (launcher daemon.Launcher, err error) {
 		return
 	}
 	if err = writeOA4MPConfig(oconf, filepath.Join(varQdlScitokensPath, "id_token_policies.qdl"), idTokenPoliciesQdlTmpl); err != nil {
-		return
-	}
-
-	user, err := config.GetOA4MPUser()
-	if err != nil {
 		return
 	}
 
