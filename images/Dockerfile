@@ -78,7 +78,7 @@ ARG XRDHTTP_PELICAN_VER=0.0.8
 ARG XRDHTTP_PELICAN_RELEASE="1.osg${OSG_SERIES}.${BASE_OS}"
 
 # For controlling the version of OA4MP that is installed.
-ARG OA4MP_VER=6.2.3
+ARG OA4MP_VER=v6.2.3
 ARG JAVA_VER=17
 ARG TOMCAT_VER=9.0.113
 
@@ -528,7 +528,7 @@ RUN --mount=type=tmpfs,target=/tmp \
 
   # Install OA4MP, a.k.a., the SciTokens OAuth2 server.
   OA4MP_INSTALLER=/tmp/oa4mp-installer.jar
-  curl -fSL https://github.com/ncsa/oa4mp/releases/download/v${OA4MP_VER}/server-installer.jar -o ${OA4MP_INSTALLER}
+  curl -fSL https://github.com/ncsa/oa4mp/releases/download/${OA4MP_VER}/server-installer.jar -o ${OA4MP_INSTALLER}
   java -jar ${OA4MP_INSTALLER} install -dir ${ST_HOME} -store file_store
 
   mkdir -p ${CATALINA_HOME}/webapps/scitokens-server
@@ -536,14 +536,19 @@ RUN --mount=type=tmpfs,target=/tmp \
 
   # Install the QDL language distribution.
   QDL_INSTALLER=/tmp/qdl-installer.jar
-  curl -fSL https://github.com/ncsa/oa4mp/releases/download/v${OA4MP_VER}/qdl-installer.jar -o ${QDL_INSTALLER}
+  curl -fSL https://github.com/ncsa/oa4mp/releases/download/${OA4MP_VER}/qdl-installer.jar -o ${QDL_INSTALLER}
   java -jar ${QDL_INSTALLER} install -dir ${QDL_HOME} -qdl
 
   # Fix file permissions.
-  chmod a+rX ${ST_HOME}/bin/* ${QDL_HOME}/bin/*
+  chmod a+rX \
+    ${QDL_HOME}/bin/* \
+    ${ST_HOME}/bin/*
   chgrp -R tomcat ${CATALINA_HOME}
 
   # Remove artifacts we no longer need.
+  rm \
+    ${ST_HOME}/lib/clc.jar \
+    ${ST_HOME}/lib/*.war
   dnf remove -y java-${JAVA_VER}-openjdk-devel
 ENDRUN
 
@@ -557,6 +562,7 @@ COPY oa4mp/resources/*.jsp ${CATALINA_HOME}/webapps/scitokens-server/
 COPY oa4mp/resources/client-template.xml ${ST_HOME}/etc/templates/client-template.xml
 
 COPY boot.qdl ${QDL_HOME}/var/scripts/boot.qdl
+# COPY qdl-test ${QDL_HOME}
 # COPY --from=scitokens-oauth2-server --chown=root:root /opt/qdl /opt/qdl
 
 #
