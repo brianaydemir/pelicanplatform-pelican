@@ -941,9 +941,19 @@ func TestLogoutAPI(t *testing.T) {
 
 		//Check for http response code 200
 		assert.Equal(t, http.StatusOK, recorder.Code, fmt.Sprintf("unexpected status %d on POST, body: %s", recorder.Code, recorder.Body.String()))
-		assert.Equal(t, 1, len(recorder.Result().Cookies()))
-		assert.Equal(t, "login", recorder.Result().Cookies()[0].Name)
-		assert.Greater(t, time.Now(), recorder.Result().Cookies()[0].Expires)
+
+		cookiesByName := make(map[string]*http.Cookie)
+		for _, c := range recorder.Result().Cookies() {
+			cookiesByName[c.Name] = c
+		}
+
+		loginCookie, ok := cookiesByName["login"]
+		require.True(t, ok, "login cookie not found in logout response")
+		assert.Greater(t, time.Now(), loginCookie.Expires)
+
+		sessionCookie, ok := cookiesByName["pelican-session"]
+		require.True(t, ok, "pelican-session cookie not found in logout response")
+		assert.Greater(t, time.Now(), sessionCookie.Expires)
 	})
 	//Invoked without valid cookie, should return there is no logged-in user
 	t.Run("Without a valid cookie", func(t *testing.T) {
