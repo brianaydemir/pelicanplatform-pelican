@@ -19,6 +19,7 @@
 package web_ui
 
 import (
+	"net/http"
 	"sync"
 
 	"github.com/gin-contrib/sessions"
@@ -43,6 +44,13 @@ func setupSession() {
 	}
 
 	store := cookie.NewStore(sessionSecretByte)
+	store.Options(sessions.Options{
+		Path:     "/",
+		MaxAge:   1200,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
 	sessionHandler = sessions.Sessions("pelican-session", store)
 }
 

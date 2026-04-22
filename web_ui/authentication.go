@@ -350,8 +350,8 @@ func setLoginCookie(ctx *gin.Context, userRecord *database.User, groups []string
 	}
 
 	// One cookie should be used for all path
-	ctx.SetCookie("login", tok, int(loginLifetime.Seconds()), "/", ctx.Request.URL.Host, true, true)
 	ctx.SetSameSite(http.SameSiteStrictMode)
+	ctx.SetCookie("login", tok, int(loginLifetime.Seconds()), "/", "", true, true)
 }
 
 // Check if user is authenticated by checking if the "login" cookie is present and set the user identity to ctx
@@ -730,8 +730,9 @@ func resetLoginHandler(ctx *gin.Context) {
 }
 
 func logoutHandler(ctx *gin.Context) {
-	ctx.SetCookie("login", "", -1, "/", ctx.Request.URL.Host, true, true)
 	ctx.SetSameSite(http.SameSiteStrictMode)
+	ctx.SetCookie("pelican-session", "", -1, "/", "", true, true)
+	ctx.SetCookie("login", "", -1, "/", "", true, true)
 	ctx.Set("User", "")
 	ctx.JSON(http.StatusOK,
 		server_structs.SimpleApiResp{

@@ -544,6 +544,7 @@ func handleDeviceVerify(provider *OIDCProvider) gin.HandlerFunc {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate CSRF token"})
 			return
 		}
+		ctx.SetSameSite(http.SameSiteStrictMode)
 		ctx.SetCookie("csrf_token", csrfToken, 600, "/api/v1.0/issuer/ns"+provider.Namespace+"/device", "", true, true)
 
 		resp := gin.H{
