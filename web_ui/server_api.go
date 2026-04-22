@@ -40,6 +40,7 @@ import (
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
 	"github.com/pelicanplatform/pelican/utils"
+	"github.com/pelicanplatform/pelican/web_ui/auth"
 )
 
 type (
@@ -165,7 +166,7 @@ func HandleCreateDowntime(ctx *gin.Context) {
 		return
 	}
 
-	user, _, _, err := GetUserGroups(ctx)
+	user, _, _, err := auth.GetUserGroups(ctx)
 	if user == "" || err != nil {
 		user = ctx.GetString("User")
 		if user == "" {
@@ -341,7 +342,7 @@ func HandleUpdateDowntime(ctx *gin.Context) {
 		}
 	}
 
-	user, _, _, err := GetUserGroups(ctx)
+	user, _, _, err := auth.GetUserGroups(ctx)
 	if user == "" || err != nil {
 		user = ctx.GetString("User")
 		if user == "" {

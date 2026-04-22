@@ -21,9 +21,7 @@ package web_ui
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -31,7 +29,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/tg123/go-htpasswd"
@@ -44,6 +41,8 @@ import (
 	"github.com/pelicanplatform/pelican/server_structs"
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
+	"github.com/pelicanplatform/pelican/web_ui/auth"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 type (
@@ -131,178 +130,6 @@ func configureAuthDB() error {
 	return nil
 }
 
-// extractUserFromBearerToken parses and verifies a Bearer token, extracting user info.
-// Uses early-exit pattern for cleaner flow control.
-func extractUserFromBearerToken(ctx *gin.Context, tokenStr string) (user string, userId string, groups []string, err error) {
-	// Parse token without verification first to check issuer
-	parsed, err := jwt.Parse([]byte(tokenStr), jwt.WithVerify(false))
-	if err != nil {
-		return "", "", nil, err
-	}
-
-	// Verify issuer matches local issuer
-	serverURL := param.Server_ExternalWebUrl.GetString()
-	if parsed.Issuer() != serverURL {
-		return "", "", nil, errors.New("token issuer does not match server URL")
-	}
-
-	// Verify signature
-	jwks, err := config.GetIssuerPublicJWKS()
-	if err != nil {
-		return "", "", nil, err
-	}
-
-	verified, err := jwt.Parse([]byte(tokenStr), jwt.WithKeySet(jwks))
-	if err != nil {
-		return "", "", nil, err
-	}
-
-	if err = jwt.Validate(verified); err != nil {
-		return "", "", nil, err
-	}
-
-	// Extract user from subject
-	user = verified.Subject()
-	if user == "" {
-		return "", "", nil, errors.New("token has empty subject")
-	}
-
-	// Extract userId claim
-	if userIdIface, ok := verified.Get("user_id"); ok {
-		if userIdStr, ok := userIdIface.(string); ok && userIdStr != "" {
-			userId = userIdStr
-		}
-	}
-
-	// Extract oidc_sub claim for admin checks against UIAdminUsers
-	if oidcSubIface, ok := verified.Get("oidc_sub"); ok {
-		if oidcSub, ok := oidcSubIface.(string); ok && oidcSub != "" {
-			ctx.Set("OIDCSub", oidcSub)
-		}
-	}
-
-	// Extract groups
-	groupsIface, ok := verified.Get("wlcg.groups")
-	if ok {
-		if groupsTmp, ok := groupsIface.([]interface{}); ok {
-			groups = make([]string, 0, len(groupsTmp))
-			for _, groupObj := range groupsTmp {
-				if groupStr, ok := groupObj.(string); ok {
-					groups = append(groups, groupStr)
-				}
-			}
-		}
-	}
-
-	// Set in context for later use
-	ctx.Set("User", user)
-	if userId != "" {
-		ctx.Set("UserId", userId)
-	}
-	if len(groups) > 0 {
-		ctx.Set("Groups", groups)
-	}
-
-	return user, userId, groups, nil
-}
-
-// Get user information including userId from the login cookie or Bearer token.
-// Returns username, userId, sub, issuer, groups, and error.
-func GetUserGroups(ctx *gin.Context) (user string, userId string, groups []string, err error) {
-	// First check if user info was already set in context (e.g., from Bearer token verification)
-	if userIface, exists := ctx.Get("User"); exists {
-		if userStr, ok := userIface.(string); ok && userStr != "" {
-			user = userStr
-			// Extract userId from context if available
-			if userIdIface, exists := ctx.Get("UserId"); exists {
-				if userIdStr, ok := userIdIface.(string); ok {
-					userId = userIdStr
-				}
-			}
-			// Extract groups from context if available
-			if groupsIface, exists := ctx.Get("Groups"); exists {
-				if groupsSlice, ok := groupsIface.([]string); ok {
-					groups = groupsSlice
-				}
-			}
-			return
-		}
-	}
-
-	// Check for Bearer token in Authorization header
-	headerToken := ctx.Request.Header["Authorization"]
-	if len(headerToken) > 0 {
-		tokenStr, found := strings.CutPrefix(headerToken[0], "Bearer ")
-		if found && tokenStr != "" {
-			user, userId, groups, err = extractUserFromBearerToken(ctx, tokenStr)
-			if err == nil && user != "" {
-				return
-			}
-			// Bearer token failed, fall through to cookie check
-		}
-	}
-
-	var token string
-	token, err = ctx.Cookie("login")
-	if err != nil {
-		if err == http.ErrNoCookie {
-			err = nil
-			return
-		} else {
-			return
-		}
-	}
-	if token == "" {
-		err = errors.New("Login cookie is empty")
-		return
-	}
-	jwks, err := config.GetIssuerPublicJWKS()
-	if err != nil {
-		return
-	}
-	parsed, err := jwt.Parse([]byte(token), jwt.WithKeySet(jwks))
-	if err != nil {
-		return
-	}
-	if err = jwt.Validate(parsed); err != nil {
-		return
-	}
-	user = parsed.Subject()
-
-	// Extract userId claim
-	userIdIface, ok := parsed.Get("user_id")
-	if !ok {
-		err = errors.New("Missing user_id claim")
-		return
-	}
-	userId, ok = userIdIface.(string)
-	if !ok {
-		err = errors.New("Invalid user_id claim")
-		return
-	}
-
-	// Extract oidc_sub claim (the OIDC subject identifier)
-	// This is set in context so admin checks can match against UIAdminUsers
-	if oidcSubIface, ok := parsed.Get("oidc_sub"); ok {
-		if oidcSub, ok := oidcSubIface.(string); ok && oidcSub != "" {
-			ctx.Set("OIDCSub", oidcSub)
-		}
-	}
-
-	groupsIface, ok := parsed.Get("wlcg.groups")
-	if ok {
-		if groupsTmp, ok := groupsIface.([]interface{}); ok {
-			groups = make([]string, 0, len(groupsTmp))
-			for _, groupObj := range groupsTmp {
-				if groupStr, ok := groupObj.(string); ok {
-					groups = append(groups, groupStr)
-				}
-			}
-		}
-	}
-	return
-}
-
 // Create a JWT and set the "login" cookie to store that JWT
 func setLoginCookie(ctx *gin.Context, userRecord *database.User, groups []string) {
 
@@ -320,13 +147,13 @@ func setLoginCookie(ctx *gin.Context, userRecord *database.User, groups []string
 	// For backwards compatibility (see #398), add additional scopes
 	// for expert admins who extract the login cookie from their browser
 	// and use it to query monitoring endpoints directly.
-	identity := UserIdentity{
+	identity := auth.UserIdentity{
 		Username: loginCookieTokenCfg.Subject,
 		ID:       userRecord.ID,
 		Sub:      userRecord.Sub,
 		Groups:   groups,
 	}
-	if isAdmin, _ := CheckAdmin(identity); isAdmin {
+	if isAdmin, _ := auth.CheckAdmin(identity); isAdmin {
 		loginCookieTokenCfg.AddScopes(token_scopes.Monitoring_Query, token_scopes.Monitoring_Scrape)
 	}
 
@@ -352,203 +179,6 @@ func setLoginCookie(ctx *gin.Context, userRecord *database.User, groups []string
 	// One cookie should be used for all path
 	ctx.SetSameSite(http.SameSiteStrictMode)
 	ctx.SetCookie("login", tok, int(loginLifetime.Seconds()), "/", "", true, true)
-}
-
-// Check if user is authenticated by checking if the "login" cookie is present and set the user identity to ctx
-func AuthHandler(ctx *gin.Context) {
-	user, userId, groups, err := GetUserGroups(ctx)
-	if user == "" || err != nil {
-		if err != nil {
-			log.Errorln("Invalid user cookie or unable to parse user cookie:", err)
-		}
-		ctx.AbortWithStatusJSON(http.StatusUnauthorized,
-			server_structs.SimpleApiResp{
-				Status: server_structs.RespFailed,
-				Msg:    "Authentication required to perform this operation",
-			})
-	} else {
-		ctx.Set("User", user)
-		ctx.Set("UserId", userId)
-		ctx.Set("Groups", groups)
-		ctx.Next()
-	}
-}
-
-// Require auth; if missing, redirect to the login endpoint.
-//
-// The current implementation forces the OAuth2 endpoint; future work may instead use a generic
-// login page.
-func RequireAuthMiddleware(ctx *gin.Context) {
-	user, userId, groups, err := GetUserGroups(ctx)
-	if user == "" || err != nil {
-		origPath := ctx.Request.URL.RequestURI()
-		redirUrl := url.URL{
-			Path:     oauthLoginPath,
-			RawQuery: "nextUrl=" + url.QueryEscape(origPath),
-		}
-		ctx.Redirect(http.StatusTemporaryRedirect, redirUrl.String())
-		ctx.Abort()
-	} else {
-		ctx.Set("User", user)
-		ctx.Set("UserId", userId)
-		ctx.Set("Groups", groups)
-		ctx.Next()
-	}
-}
-
-// UserIdentity encapsulates all available information about a user's identity
-type UserIdentity struct {
-	Username string
-	ID       string
-	Sub      string // OIDC Subject
-	Groups   []string
-}
-
-// CheckAdmin checks if a user has admin privilege. It returns boolean and a message
-// indicating the error message.
-//
-// The function checks the following in order:
-//  1. If user == "admin" (built-in admin)
-//  2. If any of the user's groups match Server.AdminGroups
-//  3. If any of the user's identifiers (Username, ID, Sub) match Server.UIAdminUsers
-//
-// Note: If you have a custom list of admin identifiers to check, set Server.UIAdminUsers.
-// If you want to grant admin privileges based on group membership, set Server.AdminGroups.
-func CheckAdmin(identity UserIdentity) (isAdmin bool, message string) {
-	if identity.Username == "admin" {
-		return true, ""
-	}
-
-	// Check admin groups if groups are provided
-	if len(identity.Groups) > 0 {
-		adminGroups := param.Server_AdminGroups.GetStringSlice()
-		if param.Server_AdminGroups.IsSet() && len(adminGroups) > 0 {
-			for _, userGroup := range identity.Groups {
-				for _, adminGroup := range adminGroups {
-					if userGroup == adminGroup {
-						return true, ""
-					}
-				}
-			}
-		}
-	}
-
-	// Check admin users against all user identifiers
-	adminList := param.Server_UIAdminUsers.GetStringSlice()
-	if param.Server_UIAdminUsers.IsSet() {
-		// Build list of all identifiers to check
-		identifiers := []string{identity.Username, identity.ID, identity.Sub}
-
-		for _, admin := range adminList {
-			for _, identifier := range identifiers {
-				if identifier != "" && identifier == admin {
-					return true, ""
-				}
-			}
-		}
-	}
-
-	// If neither admin groups nor admin users are configured, and user is not "admin", deny access
-	if !param.Server_AdminGroups.IsSet() && !param.Server_UIAdminUsers.IsSet() {
-		return false, "Server.UIAdminUsers and Server.UIAdminGroups are not set, and user is not root user. Admin check returns false"
-	}
-
-	return false, "You don't have permission to perform this action"
-}
-
-// AdminAuthHandler checks the admin status of a logged-in user. This middleware
-// should be cascaded behind the [web_ui.AuthHandler]
-func AdminAuthHandler(ctx *gin.Context) {
-	user := ctx.GetString("User")
-	// This should be done by a regular auth handler from the upstream, but we check here just in case
-	if user == "" {
-		ctx.AbortWithStatusJSON(http.StatusUnauthorized,
-			server_structs.SimpleApiResp{
-				Status: server_structs.RespFailed,
-				Msg:    "Login required to view this page",
-			})
-		return
-	}
-	// Get groups from context if available
-	var groups []string
-	if groupsIface, exists := ctx.Get("Groups"); exists {
-		if groupsSlice, ok := groupsIface.([]string); ok {
-			groups = groupsSlice
-		}
-	}
-
-	identity := UserIdentity{
-		Username: user,
-		Groups:   groups,
-		ID:       ctx.GetString("UserId"),
-		Sub:      ctx.GetString("OIDCSub"),
-	}
-
-	isAdmin, msg := CheckAdmin(identity)
-	if isAdmin {
-		ctx.Next()
-		return
-	} else {
-		ctx.AbortWithStatusJSON(http.StatusForbidden,
-			server_structs.SimpleApiResp{
-				Status: server_structs.RespFailed,
-				Msg:    msg,
-			})
-	}
-}
-
-// DowntimeAuthHandler allows EITHER:
-// 1. Admin cookie authentication (req from this server itself), OR
-// 2. Server bearer token authentication (req from another server, i.e. origin/cache)
-func DowntimeAuthHandler(ctx *gin.Context) {
-	// First, try cookie-based admin auth (this block consolidates AuthHandler and AdminAuthHandler)
-	user, userId, groups, err := GetUserGroups(ctx)
-	if user != "" && err == nil {
-		identity := UserIdentity{
-			Username: user,
-			ID:       userId,
-			Groups:   groups,
-			Sub:      ctx.GetString("OIDCSub"),
-		}
-
-		// User has valid cookie, check if admin
-		isAdmin, _ := CheckAdmin(identity)
-		if isAdmin {
-			ctx.Set("User", user)
-			ctx.Set("UserId", userId)
-			ctx.Set("Groups", groups)
-			ctx.Set("AuthMethod", "admin-cookie")
-			ctx.Next()
-			return
-		}
-	}
-
-	// If not admin cookie, try bearer token from header
-	var requiredScope token_scopes.TokenScope
-	switch ctx.Request.Method {
-	case http.MethodPost:
-		requiredScope = token_scopes.Pelican_DowntimeCreate
-	case http.MethodPut:
-		requiredScope = token_scopes.Pelican_DowntimeModify
-	case http.MethodDelete:
-		requiredScope = token_scopes.Pelican_DowntimeDelete
-	default:
-		// Fallback: require create/modify/delete not for GETs (which don't hit this handler).
-		requiredScope = token_scopes.Pelican_DowntimeModify
-	}
-	status, ok, err := token.Verify(ctx, token.AuthOption{
-		Sources: []token.TokenSource{token.Header},
-		Issuers: []token.TokenIssuer{token.RegisteredServer},
-		Scopes:  []token_scopes.TokenScope{requiredScope},
-	})
-	if !ok || err != nil {
-		ctx.AbortWithStatusJSON(status, server_structs.SimpleApiResp{
-			Status: server_structs.RespFailed,
-			Msg:    fmt.Sprint("Failed to verify the token: ", err),
-		})
-		return
-	}
-
 }
 
 // Handle regular username/password based login
@@ -744,7 +374,7 @@ func logoutHandler(ctx *gin.Context) {
 // Returns the authentication status of the current user, including user id and role
 func whoamiHandler(ctx *gin.Context) {
 	res := WhoAmIRes{}
-	if user, userId, groups, err := GetUserGroups(ctx); err != nil || user == "" {
+	if user, userId, groups, err := auth.GetUserGroups(ctx); err != nil || user == "" {
 		res.Authenticated = false
 		ctx.JSON(http.StatusOK, res)
 	} else {
@@ -753,13 +383,13 @@ func whoamiHandler(ctx *gin.Context) {
 
 		// Set header to carry CSRF token
 		ctx.Header("X-CSRF-Token", csrf.Token(ctx.Request))
-		identity := UserIdentity{
+		identity := auth.UserIdentity{
 			Username: user,
 			ID:       userId,
 			Groups:   groups,
 			Sub:      ctx.GetString("OIDCSub"),
 		}
-		isAdmin, _ := CheckAdmin(identity)
+		isAdmin, _ := auth.CheckAdmin(identity)
 		if isAdmin {
 			res.Role = AdminRole
 		} else {
@@ -801,12 +431,12 @@ func RegisterAuthEndpoints(ctx context.Context, routerGroup *gin.RouterGroup, eg
 
 	// Configure login rate limit middleware with the specified limit
 	limit := param.Server_UILoginRateLimit.GetInt()
-	loginRateMiddleware := loginRateLimitMiddleware(limit)
+	loginRateMiddleware := middleware.LoginRateLimitMiddleware(limit)
 
 	routerGroup.POST("/login", loginRateMiddleware, loginHandler)
-	routerGroup.POST("/logout", AuthHandler, logoutHandler)
-	routerGroup.POST("/initLogin", ReadOnlyMiddleware, initLoginHandler)
-	routerGroup.POST("/resetLogin", ReadOnlyMiddleware, AuthHandler, AdminAuthHandler, resetLoginHandler)
+	routerGroup.POST("/logout", middleware.AuthHandler, logoutHandler)
+	routerGroup.POST("/initLogin", middleware.ReadOnlyMiddleware, initLoginHandler)
+	routerGroup.POST("/resetLogin", middleware.ReadOnlyMiddleware, middleware.AuthHandler, middleware.AdminAuthHandler, resetLoginHandler)
 	// Pass csrfhanlder only to the whoami route to generate CSRF token
 	// while leaving other routes free of CSRF check (we might want to do it some time in the future)
 	routerGroup.GET("/whoami", csrfHandler, whoamiHandler)

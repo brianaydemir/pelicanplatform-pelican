@@ -45,6 +45,7 @@ import (
 	pelican_oauth2 "github.com/pelicanplatform/pelican/oauth2"
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/server_structs"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 const (
@@ -659,12 +660,12 @@ func ConfigOAuthClientAPIs(engine *gin.Engine) error {
 	}
 	oauthConfig = &ocfg
 
-	seHandler, err := GetSessionHandler()
+	seHandler, err := middleware.GetSessionHandler()
 	if err != nil {
 		return err
 	}
 
-	oauthGroup := engine.Group("/api/v1.0/auth/oauth", seHandler, ServerHeaderMiddleware)
+	oauthGroup := engine.Group("/api/v1.0/auth/oauth", seHandler, middleware.ServerHeaderMiddleware)
 	{
 		oauthGroup.GET("/login", handleOAuthLogin)
 		oauthGroup.GET("/callback", handleOAuthCallback)

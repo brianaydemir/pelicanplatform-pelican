@@ -51,6 +51,7 @@ import (
 	"github.com/pelicanplatform/pelican/test_utils"
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 var (
@@ -409,7 +410,7 @@ func TestMapPrometheusPath(t *testing.T) {
 func TestServerHostRestart(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
 	route := gin.New()
-	route.POST("/api/v1.0/restart", AuthHandler, AdminAuthHandler, hotRestartServer)
+	route.POST("/api/v1.0/restart", middleware.AuthHandler, middleware.AdminAuthHandler, hotRestartServer)
 	require.NoError(t, param.IssuerKey.Set(filepath.Join(t.TempDir(), "issuer.jwk")))
 
 	t.Run("unauthorized-no-token", func(t *testing.T) {
@@ -506,7 +507,7 @@ func TestServerHostRestart(t *testing.T) {
 	})
 }
 
-// Create an authentication token for testing purpose. This token can pass AuthHandler and AdminAuthHandler,
+// Create an authentication token for testing purpose. This token can pass middleware.AuthHandler and middleware.AdminAuthHandler,
 // allowing tests to proceed without authentication constraints
 func generateTestAdminUserToken(t *testing.T) string {
 	// Create token for admin user in test
@@ -518,7 +519,7 @@ func generateTestAdminUserToken(t *testing.T) string {
 	tk.Lifetime = 5 * time.Minute
 	tk.AddAudiences(param.Server_ExternalWebUrl.GetString())
 	tk.AddScopes(token_scopes.WebUi_Access)
-	// Add OIDC claims required by GetUserGroups
+	// Add OIDC claims required by middleware.GetUserGroups
 	tk.Claims = map[string]string{
 		"user_id": "admin-user",
 	}
@@ -538,7 +539,7 @@ func generateToken(t *testing.T, scopes []token_scopes.TokenScope, subject strin
 	tk.Lifetime = 5 * time.Minute
 	tk.AddAudiences(param.Server_ExternalWebUrl.GetString())
 	tk.AddScopes(scopes...)
-	// Add OIDC claims required by GetUserGroups
+	// Add OIDC claims required by middleware.GetUserGroups
 	tk.Claims = map[string]string{
 		"user_id": subject,
 	}
@@ -1204,7 +1205,7 @@ func TestReadOnlyMiddleware(t *testing.T) {
 	route := gin.New()
 	// Apply the ReadOnly middleware to a test route group
 	readOnlyGroup := route.Group("/api/v1.0")
-	readOnlyGroup.Use(ReadOnlyMiddleware)
+	readOnlyGroup.Use(middleware.ReadOnlyMiddleware)
 	// Set the app to have Read Only mode enabled
 	require.NoError(t, param.Server_WebReadOnly.Set(true))
 	{

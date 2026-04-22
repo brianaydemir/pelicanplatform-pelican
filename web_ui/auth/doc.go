@@ -1,6 +1,6 @@
 /***************************************************************
  *
- * Copyright (C) 2024, Pelican Project, Morgridge Institute for Research
+ * Copyright (C) 2026, Pelican Project, Morgridge Institute for Research
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License.  You may
@@ -16,25 +16,6 @@
  *
  ***************************************************************/
 
-package origin
-
-import (
-	"github.com/gin-gonic/gin"
-
-	"github.com/pelicanplatform/pelican/web_ui/middleware"
-)
-
-func RegisterOriginWebAPI(routerGroup *gin.RouterGroup) error {
-
-	routerGroup.GET("/exports", middleware.AuthHandler, middleware.AdminAuthHandler, handleExports)
-
-	collectionAPIGroup := routerGroup.Group("/collections") // Path is /api/v1.0/origin_ui/collections
-	RegisterCollectionsAPI(collectionAPIGroup)
-
-	globusAPIGroup := routerGroup.Group("/globus") // Path is /api/v1.0/origin_ui/globus
-	if err := RegisterGlobusAPI(globusAPIGroup); err != nil {
-		return err
-	}
-
-	return nil
-}
+// Package auth provides user-identity types and helpers for extracting
+// and verifying user credentials from gin request contexts.
+package auth

@@ -29,7 +29,7 @@ import (
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/server_structs"
 	"github.com/pelicanplatform/pelican/utils"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 type (
@@ -572,11 +572,11 @@ func RegisterDirectorWebAPI(router *gin.RouterGroup) {
 		directorWebAPI.GET("/servers/:name", getServerHandler)
 		directorWebAPI.GET("/servers/:name/namespaces", listServerNamespaces)
 		directorWebAPI.GET("/servers/:name/downtimes", getDowntimeDetails)
-		directorWebAPI.GET("/servers/origins/stat/*path", web_ui.AuthHandler, queryOrigins)
-		directorWebAPI.HEAD("/servers/origins/stat/*path", web_ui.AuthHandler, queryOrigins)
+		directorWebAPI.GET("/servers/origins/stat/*path", middleware.AuthHandler, queryOrigins)
+		directorWebAPI.HEAD("/servers/origins/stat/*path", middleware.AuthHandler, queryOrigins)
 		directorWebAPI.GET("/namespaces", listNamespacesHandler)
 		directorWebAPI.GET("/contact", handleDirectorContact)
 		directorWebAPI.GET("/downtimes", listDowntimeDetails)
-		directorWebAPI.GET("/federation/discrepancy", web_ui.AuthHandler, web_ui.AdminAuthHandler, getFederationDiscrepancy)
+		directorWebAPI.GET("/federation/discrepancy", middleware.AuthHandler, middleware.AdminAuthHandler, getFederationDiscrepancy)
 	}
 }

@@ -44,7 +44,7 @@ import (
 	"github.com/pelicanplatform/pelican/server_structs"
 	"github.com/pelicanplatform/pelican/token_scopes"
 	"github.com/pelicanplatform/pelican/utils"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 var (
@@ -343,7 +343,7 @@ func oa4mpProxy(ctx *gin.Context) {
 	var groupsList []string
 	var allMatchedGroups []string
 	if ctx.Request.URL.Path == "/api/v1.0/issuer/device" || ctx.Request.URL.Path == "/api/v1.0/issuer/authorize" {
-		web_ui.RequireAuthMiddleware(ctx)
+		middleware.RequireAuthMiddleware(ctx)
 		if ctx.IsAborted() {
 			return
 		}

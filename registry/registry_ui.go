@@ -41,7 +41,8 @@ import (
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
 	"github.com/pelicanplatform/pelican/utils"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/auth"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 type (
@@ -196,7 +197,7 @@ func populateRegistrationFields(prefix string, data interface{}) []registrationF
 // GET /namespaces
 func listNamespaces(ctx *gin.Context) {
 	// Directly call GetUser as we want this endpoint to also be able to serve unauthed users
-	user, _, _, err := web_ui.GetUserGroups(ctx)
+	user, _, _, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		log.Error("Failed to check user login status: ", err)
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
@@ -343,7 +344,7 @@ func getNamespaceRegFields(ctx *gin.Context) {
 // PUT /namespaces/:id
 func createUpdateNamespace(ctx *gin.Context, isUpdate bool) {
 	accessToken := ctx.Query("access_token")
-	user, userId, groups, err := web_ui.GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		log.Error("Failed to get user groups: ", err)
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
@@ -351,13 +352,13 @@ func createUpdateNamespace(ctx *gin.Context, isUpdate bool) {
 			Msg:    "Failed to get user groups"})
 		return
 	}
-	identity := web_ui.UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := web_ui.CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	id := 0 // namespace ID when doing update, will be populated later
 	if user == "" {
@@ -667,7 +668,7 @@ func createUpdateNamespace(ctx *gin.Context, isUpdate bool) {
 //
 // GET /namesapces/:id
 func getNamespace(ctx *gin.Context) {
-	user, userId, groups, err := web_ui.GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		log.Error("Failed to get user groups: ", err)
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
@@ -701,13 +702,13 @@ func getNamespace(ctx *gin.Context) {
 		return
 	}
 
-	identity := web_ui.UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := web_ui.CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 	belongsTo := false
 
 	if !isAdmin { // Not admin, need to check if the namespace belongs to the user
@@ -1038,37 +1039,37 @@ func RegisterRegistryWebAPI(router *gin.RouterGroup) error {
 	// Follow RESTful schema
 	{
 		registryWebAPI.GET("/namespaces", listNamespaces)
-		registryWebAPI.OPTIONS("/namespaces", web_ui.AuthHandler, getNamespaceRegFields)
-		registryWebAPI.POST("/namespaces", web_ui.AuthHandler, func(ctx *gin.Context) {
+		registryWebAPI.OPTIONS("/namespaces", middleware.AuthHandler, getNamespaceRegFields)
+		registryWebAPI.POST("/namespaces", middleware.AuthHandler, func(ctx *gin.Context) {
 			createUpdateNamespace(ctx, false)
 		})
 
-		registryWebAPI.GET("/namespaces/user", web_ui.AuthHandler, listNamespacesForUser)
+		registryWebAPI.GET("/namespaces/user", middleware.AuthHandler, listNamespacesForUser)
 
-		registryWebAPI.GET("/namespaces/:id", web_ui.AuthHandler, getNamespace)
-		registryWebAPI.PUT("/namespaces/:id", web_ui.AuthHandler, func(ctx *gin.Context) {
+		registryWebAPI.GET("/namespaces/:id", middleware.AuthHandler, getNamespace)
+		registryWebAPI.PUT("/namespaces/:id", middleware.AuthHandler, func(ctx *gin.Context) {
 			createUpdateNamespace(ctx, true)
 		})
-		registryWebAPI.DELETE("/namespaces/:id", web_ui.AuthHandler, web_ui.AdminAuthHandler, deleteNamespace)
+		registryWebAPI.DELETE("/namespaces/:id", middleware.AuthHandler, middleware.AdminAuthHandler, deleteNamespace)
 		registryWebAPI.GET("/namespaces/:id/pubkey", getNamespaceJWKS)
-		registryWebAPI.PATCH("/namespaces/:id/approve", web_ui.AuthHandler, web_ui.AdminAuthHandler, func(ctx *gin.Context) {
+		registryWebAPI.PATCH("/namespaces/:id/approve", middleware.AuthHandler, middleware.AdminAuthHandler, func(ctx *gin.Context) {
 			updateNamespaceStatus(ctx, server_structs.RegApproved)
 		})
-		registryWebAPI.PATCH("/namespaces/:id/deny", web_ui.AuthHandler, web_ui.AdminAuthHandler, func(ctx *gin.Context) {
+		registryWebAPI.PATCH("/namespaces/:id/deny", middleware.AuthHandler, middleware.AdminAuthHandler, func(ctx *gin.Context) {
 			updateNamespaceStatus(ctx, server_structs.RegDenied)
 		})
 	}
 	{
 		registryWebAPI.GET("/servers", listServersHandler)
 		registryWebAPI.GET("/servers/:id", getServerHandler)
-		registryWebAPI.DELETE("/servers/:id", web_ui.AuthHandler, web_ui.AdminAuthHandler, deleteServerHandler)
+		registryWebAPI.DELETE("/servers/:id", middleware.AuthHandler, middleware.AdminAuthHandler, deleteServerHandler)
 		// If you want to CREATE/PUT a server, just use the namespaces endpoint
 	}
 	{
 		registryWebAPI.GET("/topology", listTopologyNamespaces)
 	}
 	{
-		registryWebAPI.GET("/institutions", web_ui.AuthHandler, listInstitutions)
+		registryWebAPI.GET("/institutions", middleware.AuthHandler, listInstitutions)
 	}
 	return nil
 }

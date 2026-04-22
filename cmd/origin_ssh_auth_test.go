@@ -49,7 +49,7 @@ import (
 	"github.com/pelicanplatform/pelican/test_utils"
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 // testSSHServer creates a simple SSH server for testing auth methods
@@ -484,7 +484,7 @@ func TestSSHWebSocketAuthRequired(t *testing.T) {
 
 	// Create router with SSH WebSocket handler protected by auth middleware
 	router := gin.New()
-	ssh_posixv2.RegisterWebSocketHandler(router, ctx, egrp, web_ui.AuthHandler, web_ui.AdminAuthHandler)
+	ssh_posixv2.RegisterWebSocketHandler(router, ctx, egrp, middleware.AuthHandler, middleware.AdminAuthHandler)
 
 	t.Run("status-endpoint-rejects-unauthenticated", func(t *testing.T) {
 		w := httptest.NewRecorder()

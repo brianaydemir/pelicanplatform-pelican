@@ -48,6 +48,7 @@ import (
 	"github.com/pelicanplatform/pelican/server_structs"
 	"github.com/pelicanplatform/pelican/server_utils"
 	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 var (
@@ -122,7 +123,7 @@ func LaunchModules(ctx context.Context, modules server_structs.ServerType) (serv
 
 	if modules.IsEnabled(server_structs.BrokerType) {
 		log.Debug("Enabling broker endpoints")
-		rootGroup := engine.Group("/", web_ui.ServerHeaderMiddleware)
+		rootGroup := engine.Group("/", middleware.ServerHeaderMiddleware)
 		broker.RegisterBroker(ctx, rootGroup)
 		broker.LaunchNamespaceKeyMaintenance(ctx, egrp)
 	}
@@ -193,7 +194,7 @@ func LaunchModules(ctx context.Context, modules server_structs.ServerType) (serv
 		if err != nil {
 			return
 		}
-		rootGroup := engine.Group("/", web_ui.ServerHeaderMiddleware)
+		rootGroup := engine.Group("/", middleware.ServerHeaderMiddleware)
 		lc.Register(ctx, rootGroup)
 	}
 

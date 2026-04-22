@@ -44,7 +44,8 @@ import (
 	"github.com/pelicanplatform/pelican/server_structs"
 	"github.com/pelicanplatform/pelican/server_utils"
 	"github.com/pelicanplatform/pelican/ssh_posixv2"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/auth"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 	"github.com/pelicanplatform/pelican/xrootd"
 )
 
@@ -108,13 +109,13 @@ func OriginServe(ctx context.Context, engine *gin.Engine, egrp *errgroup.Group, 
 	baseAPIGroup := engine.Group("/api/v1.0")
 
 	// Set up the APIs unrelated to UI, which only contains director-based health test reporting endpoint for now
-	originAPIGroup := baseAPIGroup.Group("", web_ui.ServerHeaderMiddleware)
+	originAPIGroup := baseAPIGroup.Group("", middleware.ServerHeaderMiddleware)
 	if err = origin.RegisterOriginAPI(originAPIGroup, ctx, egrp); err != nil {
 		return nil, err
 	}
 
 	// Set up the APIs for the origin UI
-	webUIRouterGroup := baseAPIGroup.Group("/origin_ui", web_ui.ServerHeaderMiddleware, web_ui.ReadOnlyMiddleware)
+	webUIRouterGroup := baseAPIGroup.Group("/origin_ui", middleware.ServerHeaderMiddleware, middleware.ReadOnlyMiddleware)
 	if err = origin.RegisterOriginWebAPI(webUIRouterGroup); err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func OriginServe(ctx context.Context, engine *gin.Engine, egrp *errgroup.Group, 
 	// Register OIDC metadata endpoints
 	// Director also registers this metadata URL; avoid registering twice.
 	if !modules.IsEnabled(server_structs.DirectorType) {
-		OIDCAPIGroup := engine.Group("/", web_ui.ServerHeaderMiddleware, web_ui.ReadOnlyMiddleware)
+		OIDCAPIGroup := engine.Group("/", middleware.ServerHeaderMiddleware, middleware.ReadOnlyMiddleware)
 		server_utils.RegisterOIDCAPI(OIDCAPIGroup, false)
 	}
 
@@ -225,7 +226,7 @@ func OriginServeFinish(ctx context.Context, egrp *errgroup.Group, engine *gin.En
 		// For SSH backend, initialize the SSH connection before setting up handlers
 		if storageType == string(server_structs.OriginStorageSSH) {
 			// Register WebSocket handlers for keyboard-interactive auth with admin authentication
-			ssh_posixv2.RegisterWebSocketHandler(engine, ctx, egrp, web_ui.AuthHandler, web_ui.AdminAuthHandler)
+			ssh_posixv2.RegisterWebSocketHandler(engine, ctx, egrp, middleware.AuthHandler, middleware.AdminAuthHandler)
 
 			// Initialize the SSH backend (creates helper broker and starts connection manager).
 			// In tunnel mode the origin dials the helper through SSH channels;
@@ -383,7 +384,7 @@ func configureEmbeddedIssuer(ctx context.Context, egrp *errgroup.Group, engine *
 	// AuthHandler, this middleware never aborts—it lets the handler decide
 	// how to react to an unauthenticated request.
 	issuer.RegisterRoutesWithMiddleware(engine, registry, func(ctx *gin.Context) {
-		user, userId, groups, _ := web_ui.GetUserGroups(ctx)
+		user, userId, groups, _ := auth.GetUserGroups(ctx)
 		if user != "" {
 			ctx.Set("User", user)
 			if userId != "" {
@@ -399,7 +400,7 @@ func configureEmbeddedIssuer(ctx context.Context, egrp *errgroup.Group, engine *
 	// Register admin client-management endpoints behind full admin auth.
 	// Admin routes live under /api/v1.0/issuer/admin/ns/*namespace so that
 	// Gin route groups apply the middleware natively.
-	issuer.RegisterAdminRoutes(engine, registry, web_ui.AuthHandler, web_ui.AdminAuthHandler)
+	issuer.RegisterAdminRoutes(engine, registry, middleware.AuthHandler, middleware.AdminAuthHandler)
 
 	log.Info("Embedded OIDC issuer configured successfully")
 	return nil

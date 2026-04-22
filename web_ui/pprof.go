@@ -22,11 +22,13 @@ import (
 	"net/http/pprof"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 // Setup endpoints for pprof https://pkg.go.dev/runtime/pprof
 func configurePprof(router *gin.Engine) {
-	pprofRoutes := router.Group("/api/v1.0/debug/pprof", AuthHandler, AdminAuthHandler)
+	pprofRoutes := router.Group("/api/v1.0/debug/pprof", middleware.AuthHandler, middleware.AdminAuthHandler)
 	{
 		pprofRoutes.GET("/", gin.WrapF(pprof.Index))
 		pprofRoutes.GET("/cmdline", gin.WrapF(pprof.Cmdline))

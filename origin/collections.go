@@ -21,27 +21,28 @@ import (
 	"github.com/pelicanplatform/pelican/server_structs"
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/auth"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 func RegisterCollectionsAPI(group *gin.RouterGroup) {
 	// Collections API
-	group.GET("", web_ui.AuthHandler, handleListCollections)
-	group.POST("", web_ui.AuthHandler, handleCreateCollection)
-	group.PATCH("/:id", web_ui.AuthHandler, handleUpdateCollection)
-	group.DELETE("/:id", web_ui.AuthHandler, handleDeleteCollection)
-	group.GET("/:id", web_ui.AuthHandler, handleGetCollection)
+	group.GET("", middleware.AuthHandler, handleListCollections)
+	group.POST("", middleware.AuthHandler, handleCreateCollection)
+	group.PATCH("/:id", middleware.AuthHandler, handleUpdateCollection)
+	group.DELETE("/:id", middleware.AuthHandler, handleDeleteCollection)
+	group.GET("/:id", middleware.AuthHandler, handleGetCollection)
 	// TODO: More collections work in the future, the notion of members is up in the air
-	// group.POST("/:id/members", web_ui.AuthHandler, handleAddCollectionMembers)
-	// group.DELETE("/:id/members", web_ui.AuthHandler, handleRemoveCollectionMembers)
-	// group.DELETE("/:id/members/:encoded_object_url", web_ui.AuthHandler, handleRemoveCollectionMember)
-	// group.GET("/:id/members", web_ui.AuthHandler, handleListCollectionMembers)
-	group.GET("/:id/metadata", web_ui.AuthHandler, handleGetCollectionMetadata)
-	group.PUT("/:id/metadata/:key", web_ui.AuthHandler, handlePutCollectionMetadata)
-	group.DELETE("/:id/metadata/:key", web_ui.AuthHandler, handleDeleteCollectionMetadata)
-	group.GET("/:id/acl", web_ui.AuthHandler, handleGetCollectionAcls)
-	group.POST("/:id/acl", web_ui.AuthHandler, handleGrantCollectionAcl)
-	group.DELETE("/:id/acl", web_ui.AuthHandler, handleRevokeCollectionAcl)
+	// group.POST("/:id/members", middleware.AuthHandler, handleAddCollectionMembers)
+	// group.DELETE("/:id/members", middleware.AuthHandler, handleRemoveCollectionMembers)
+	// group.DELETE("/:id/members/:encoded_object_url", middleware.AuthHandler, handleRemoveCollectionMember)
+	// group.GET("/:id/members", middleware.AuthHandler, handleListCollectionMembers)
+	group.GET("/:id/metadata", middleware.AuthHandler, handleGetCollectionMetadata)
+	group.PUT("/:id/metadata/:key", middleware.AuthHandler, handlePutCollectionMetadata)
+	group.DELETE("/:id/metadata/:key", middleware.AuthHandler, handleDeleteCollectionMetadata)
+	group.GET("/:id/acl", middleware.AuthHandler, handleGetCollectionAcls)
+	group.POST("/:id/acl", middleware.AuthHandler, handleGrantCollectionAcl)
+	group.DELETE("/:id/acl", middleware.AuthHandler, handleRevokeCollectionAcl)
 }
 
 // verifyTokenWithCollectionScope verifies a token with standard verification first,
@@ -324,7 +325,7 @@ func handleListCollections(ctx *gin.Context) {
 		return
 	}
 
-	user, _, groups, err := web_ui.GetUserGroups(ctx)
+	user, _, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -418,7 +419,7 @@ func handleCreateCollection(ctx *gin.Context) {
 		return
 	}
 
-	user, _, _, err := web_ui.GetUserGroups(ctx)
+	user, _, _, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -483,7 +484,7 @@ func handleUpdateCollection(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := web_ui.GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -498,13 +499,13 @@ func handleUpdateCollection(ctx *gin.Context) {
 		return
 	}
 
-	identity := web_ui.UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := web_ui.CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	var visibility database.Visibility
 	if req.Visibility != nil {
@@ -569,7 +570,7 @@ func handleRemoveCollectionMembers(ctx *gin.Context) {
 		return
 	}
 
-	user, groups, err := web_ui.GetUserGroups(ctx)
+	user, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -584,7 +585,7 @@ func handleRemoveCollectionMembers(ctx *gin.Context) {
 		return
 	}
 
-	isAdmin, _ := web_ui.CheckAdmin(user)
+	isAdmin, _ := auth.CheckAdmin(user)
 
 	err = database.RemoveCollectionMembers(database.ServerDatabase, ctx.Param("id"), req.Members, user, groups, isAdmin)
 	if err != nil {
@@ -630,7 +631,7 @@ func handleRemoveCollectionMember(ctx *gin.Context) {
 		return
 	}
 
-	user, groups, err := web_ui.GetUserGroups(ctx)
+	user, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -645,7 +646,7 @@ func handleRemoveCollectionMember(ctx *gin.Context) {
 		return
 	}
 
-	isAdmin, _ := web_ui.CheckAdmin(user)
+	isAdmin, _ := auth.CheckAdmin(user)
 
 	err = database.RemoveCollectionMembers(database.ServerDatabase, ctx.Param("id"), []string{objectURL}, user, groups, isAdmin)
 	if err != nil {
@@ -703,7 +704,7 @@ func handleAddCollectionMembers(ctx *gin.Context) {
 		}
 	}
 
-	user, groups, err := web_ui.GetUserGroups(ctx)
+	user, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -718,7 +719,7 @@ func handleAddCollectionMembers(ctx *gin.Context) {
 		return
 	}
 
-	isAdmin, _ := web_ui.CheckAdmin(user)
+	isAdmin, _ := auth.CheckAdmin(user)
 
 	err = database.AddCollectionMembers(database.ServerDatabase, ctx.Param("id"), req.Members, user, groups, isAdmin)
 	if err != nil {
@@ -754,7 +755,7 @@ func handleListCollectionMembers(ctx *gin.Context) {
 		return
 	}
 
-	user, groups, err := web_ui.GetUserGroups(ctx)
+	user, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -832,7 +833,7 @@ func handleGetCollectionMetadata(ctx *gin.Context) {
 		return
 	}
 
-	user, _, groups, err := web_ui.GetUserGroups(ctx)
+	user, _, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -910,7 +911,7 @@ func handlePutCollectionMetadata(ctx *gin.Context) {
 		value = string(bodyBytes)
 	}
 
-	user, userId, groups, err := web_ui.GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -925,13 +926,13 @@ func handlePutCollectionMetadata(ctx *gin.Context) {
 		return
 	}
 
-	identity := web_ui.UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := web_ui.CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	err = database.UpsertCollectionMetadata(database.ServerDatabase, ctx.Param("id"), user, groups, key, value, isAdmin)
 	if err != nil {
@@ -972,7 +973,7 @@ func handleDeleteCollectionMetadata(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := web_ui.GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -987,13 +988,13 @@ func handleDeleteCollectionMetadata(ctx *gin.Context) {
 		return
 	}
 
-	identity := web_ui.UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := web_ui.CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	err = database.DeleteCollectionMetadata(database.ServerDatabase, ctx.Param("id"), user, groups, key, isAdmin)
 	if err != nil {
@@ -1025,7 +1026,7 @@ func handleGetCollection(ctx *gin.Context) {
 		return
 	}
 
-	user, _, groups, err := web_ui.GetUserGroups(ctx)
+	user, _, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -1090,7 +1091,7 @@ func handleDeleteCollection(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := web_ui.GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -1108,13 +1109,13 @@ func handleDeleteCollection(ctx *gin.Context) {
 	}
 
 	// we will use this check to determine if we can bypass the collection owner check
-	identity := web_ui.UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := web_ui.CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	err = database.DeleteCollection(database.ServerDatabase, ctx.Param("id"), user, groups, isAdmin)
 	if err != nil {
@@ -1146,7 +1147,7 @@ func handleGetCollectionAcls(ctx *gin.Context) {
 		return
 	}
 
-	user, _, groups, err := web_ui.GetUserGroups(ctx)
+	user, _, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -1218,7 +1219,7 @@ func handleGrantCollectionAcl(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := web_ui.GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -1233,13 +1234,13 @@ func handleGrantCollectionAcl(ctx *gin.Context) {
 		return
 	}
 
-	identity := web_ui.UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := web_ui.CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	err = database.GrantCollectionAcl(database.ServerDatabase, ctx.Param("id"), user, groups, req.GroupID, role, req.ExpiresAt, isAdmin)
 	if err != nil {
@@ -1297,7 +1298,7 @@ func handleRevokeCollectionAcl(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := web_ui.GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -1312,13 +1313,13 @@ func handleRevokeCollectionAcl(ctx *gin.Context) {
 		return
 	}
 
-	identity := web_ui.UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := web_ui.CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	err = database.RevokeCollectionAcl(database.ServerDatabase, ctx.Param("id"), user, groups, req.GroupID, role, isAdmin)
 	if err != nil {

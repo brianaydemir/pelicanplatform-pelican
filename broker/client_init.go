@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pelicanplatform/pelican/server_utils"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 var callbackRegistered sync.Once
@@ -21,7 +21,7 @@ func init() {
 // brokered connections (as the initiator, not as the broker itself).
 func InitializeBrokerClient(ctx context.Context, egrp *errgroup.Group, router *gin.Engine) {
 	callbackRegistered.Do(func() {
-		RegisterBrokerCallback(ctx, router.Group("/", web_ui.ServerHeaderMiddleware))
+		RegisterBrokerCallback(ctx, router.Group("/", middleware.ServerHeaderMiddleware))
 	})
 	LaunchNamespaceKeyMaintenance(ctx, egrp)
 }

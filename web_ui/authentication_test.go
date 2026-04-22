@@ -47,6 +47,8 @@ import (
 	"github.com/pelicanplatform/pelican/test_utils"
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
+	"github.com/pelicanplatform/pelican/web_ui/auth"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 func migrateTestDB(t *testing.T) {
@@ -750,16 +752,16 @@ func TestCheckAdmin(t *testing.T) {
 				require.NoError(t, param.Server_AdminGroups.Set(tc.adminGroups))
 			}
 
-			// Call CheckAdmin
+			// Call auth.CheckAdmin
 			var isAdmin bool
 			var msg string
-			identity := UserIdentity{
+			identity := auth.UserIdentity{
 				Username: tc.user,
 				ID:       tc.id,
 				Sub:      tc.sub,
 				Groups:   tc.groups,
 			}
-			isAdmin, msg = CheckAdmin(identity)
+			isAdmin, msg = auth.CheckAdmin(identity)
 
 			// Verify results
 			assert.Equal(t, tc.expectedAdmin, isAdmin, "Admin status mismatch for user %s", tc.user)
@@ -863,7 +865,7 @@ func TestAdminAuthHandler(t *testing.T) {
 			// If admin middleware didn't abort, the response will have status code == 200
 			router.GET("/test",
 				func(ctx *gin.Context) { tc.setupUserFunc(ctx) },
-				AdminAuthHandler,
+				middleware.AdminAuthHandler,
 				func(ctx *gin.Context) { ctx.AbortWithStatus(http.StatusOK) },
 			)
 			req, err := http.NewRequest("GET", "/test", nil)

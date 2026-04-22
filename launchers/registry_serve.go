@@ -32,7 +32,7 @@ import (
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/registry"
 	"github.com/pelicanplatform/pelican/server_structs"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 func RegistryServe(ctx context.Context, engine *gin.Engine, egrp *errgroup.Group) error {
@@ -64,7 +64,7 @@ func RegistryServe(ctx context.Context, engine *gin.Engine, egrp *errgroup.Group
 		go registry.PeriodicTopologyReload(ctx)
 	}
 
-	rootRouterGroup := engine.Group("/", web_ui.ServerHeaderMiddleware)
+	rootRouterGroup := engine.Group("/", middleware.ServerHeaderMiddleware)
 	// Register routes for server/Pelican client facing APIs
 	registry.RegisterRegistryAPI(rootRouterGroup)
 	// Register routes for APIs to registry Web UI

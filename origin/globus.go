@@ -34,12 +34,11 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pelicanplatform/pelican/web_ui"
-
 	"github.com/pelicanplatform/pelican/config"
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/server_structs"
 	"github.com/pelicanplatform/pelican/server_utils"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 type globusExportStatus string
@@ -93,16 +92,16 @@ func RegisterGlobusAPI(routerGroup *gin.RouterGroup) error {
 		return errors.Wrapf(err, "failed to initialize Globus OAuth client")
 	}
 
-	seHandler, err := web_ui.GetSessionHandler()
+	seHandler, err := middleware.GetSessionHandler()
 	if err != nil {
 		return err
 	}
 
-	routerGroup.GET("/exports", web_ui.AuthHandler, web_ui.AdminAuthHandler, listGlobusExports)
+	routerGroup.GET("/exports", middleware.AuthHandler, middleware.AdminAuthHandler, listGlobusExports)
 
 	globusAuthAPI := routerGroup.Group("/auth", seHandler)
-	globusAuthAPI.GET("/login/:id", web_ui.AuthHandler, web_ui.AdminAuthHandler, handleGlobusAuth)
-	globusAuthAPI.GET("/callback", web_ui.AuthHandler, web_ui.AdminAuthHandler, handleGlobusCallback)
+	globusAuthAPI.GET("/login/:id", middleware.AuthHandler, middleware.AdminAuthHandler, handleGlobusAuth)
+	globusAuthAPI.GET("/callback", middleware.AuthHandler, middleware.AdminAuthHandler, handleGlobusCallback)
 
 	return nil
 }

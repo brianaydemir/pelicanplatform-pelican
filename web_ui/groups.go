@@ -13,6 +13,7 @@ import (
 	"github.com/pelicanplatform/pelican/server_structs"
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
+	"github.com/pelicanplatform/pelican/web_ui/auth"
 )
 
 type CreateGroupReq struct {
@@ -131,7 +132,7 @@ func handleCreateGroup(ctx *gin.Context) {
 		return
 	}
 
-	_, userId, _, err := GetUserGroups(ctx)
+	_, userId, _, err := auth.GetUserGroups(ctx)
 	if err != nil || userId == "" {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -192,7 +193,7 @@ func handleUpdateGroup(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil || userId == "" || user == "" {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -200,7 +201,7 @@ func handleUpdateGroup(ctx *gin.Context) {
 		})
 		return
 	}
-	isAdmin, _ := CheckAdmin(UserIdentity{
+	isAdmin, _ := auth.CheckAdmin(auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
@@ -309,7 +310,7 @@ func handleAddGroupMember(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -326,13 +327,13 @@ func handleAddGroupMember(ctx *gin.Context) {
 	}
 
 	// Check if user is admin (allows bypassing ownership check)
-	identity := UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	id := ctx.Param("id")
 	if id == "" {
@@ -440,7 +441,7 @@ func handleRemoveGroupMember(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -457,13 +458,13 @@ func handleRemoveGroupMember(ctx *gin.Context) {
 	}
 
 	// Check if user is admin (allows bypassing ownership check)
-	identity := UserIdentity{
+	identity := auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
 		Sub:      ctx.GetString("OIDCSub"),
 	}
-	isAdmin, _ := CheckAdmin(identity)
+	isAdmin, _ := auth.CheckAdmin(identity)
 
 	id := ctx.Param("id")
 	if id == "" {
@@ -607,7 +608,7 @@ func handleUpdateUser(ctx *gin.Context) {
 	}
 
 	// Get the requestor's identity for authorization
-	user, userId, groups, err := GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil || userId == "" || user == "" {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -615,7 +616,7 @@ func handleUpdateUser(ctx *gin.Context) {
 		})
 		return
 	}
-	isAdmin, _ := CheckAdmin(UserIdentity{
+	isAdmin, _ := auth.CheckAdmin(auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
@@ -691,7 +692,7 @@ func handleDeleteGroup(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil || userId == "" || user == "" {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -699,7 +700,7 @@ func handleDeleteGroup(ctx *gin.Context) {
 		})
 		return
 	}
-	isAdmin, _ := CheckAdmin(UserIdentity{
+	isAdmin, _ := auth.CheckAdmin(auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,
@@ -753,7 +754,7 @@ func handleDeleteUser(ctx *gin.Context) {
 		return
 	}
 
-	user, userId, groups, err := GetUserGroups(ctx)
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if err != nil || userId == "" || user == "" {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,
@@ -761,7 +762,7 @@ func handleDeleteUser(ctx *gin.Context) {
 		})
 		return
 	}
-	isAdmin, _ := CheckAdmin(UserIdentity{
+	isAdmin, _ := auth.CheckAdmin(auth.UserIdentity{
 		Username: user,
 		ID:       userId,
 		Groups:   groups,

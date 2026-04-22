@@ -56,6 +56,8 @@ import (
 	"github.com/pelicanplatform/pelican/server_utils"
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
+	"github.com/pelicanplatform/pelican/web_ui/auth"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 var (
@@ -273,9 +275,7 @@ func handleWebUIRedirect(ctx *gin.Context) {
 func handleWebUIAuth(ctx *gin.Context) {
 	requestPath := ctx.Param("requestPath")
 	db := authDB.Load()
-	user, userId, groups, err := GetUserGroups(ctx)
-
-	// Skip auth check for static files other than html pages
+	user, userId, groups, err := auth.GetUserGroups(ctx)
 	if path.Ext(requestPath) != "" && path.Ext(requestPath) != ".html" {
 		ctx.Next()
 		return
@@ -334,13 +334,13 @@ func handleWebUIAuth(ctx *gin.Context) {
 
 	// If rootPage requires admin privilege
 	if slices.Contains(adminAccessPages, rootPage) {
-		identity := UserIdentity{
+		identity := auth.UserIdentity{
 			Username: user,
 			ID:       userId,
 			Groups:   groups,
 			Sub:      ctx.GetString("OIDCSub"),
 		}
-		isAdmin, _ := CheckAdmin(identity)
+		isAdmin, _ := auth.CheckAdmin(identity)
 		if isAdmin {
 
 			// If user is admin, pass the check
@@ -460,7 +460,7 @@ func createApiToken(ctx *gin.Context) {
 		expirationTime = expirationTime.UTC()
 	}
 	scopes := strings.Join(req.Scopes, ",")
-	user, _, _, err := GetUserGroups(ctx)
+	user, _, _, err := auth.GetUserGroups(ctx)
 	if err != nil {
 		log.Warn("Failed to get user from context")
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
@@ -586,12 +586,12 @@ func configureWebResource(engine *gin.Engine) {
 func registerCommonEndpoints(routerGroup *gin.RouterGroup) error {
 
 	// Singleton routes
-	routerGroup.POST("/restart", AuthHandler, AdminAuthHandler, hotRestartServer)
+	routerGroup.POST("/restart", middleware.AuthHandler, middleware.AdminAuthHandler, hotRestartServer)
 	routerGroup.GET("/servers", getEnabledServers)
 
 	// TODO: Move this to the Origin or Cache specific API group
 	if config.ValidateServerType([]server_structs.ServerType{server_structs.OriginType, server_structs.CacheType}) {
-		routerGroup.GET("/server/localMetadata/history", AuthHandler, AdminAuthHandler, HandleGetServerLocalMetadataHistory)
+		routerGroup.GET("/server/localMetadata/history", middleware.AuthHandler, middleware.AdminAuthHandler, HandleGetServerLocalMetadataHistory)
 	}
 
 	// Health check endpoint for web routerGroup
@@ -603,14 +603,14 @@ func registerCommonEndpoints(routerGroup *gin.RouterGroup) error {
 	routerGroup.GET("/version", getVersionHandler)
 
 	// Config management endpoints
-	configAPIGroup := routerGroup.Group("/config", AuthHandler, AdminAuthHandler)
+	configAPIGroup := routerGroup.Group("/config", middleware.AuthHandler, middleware.AdminAuthHandler)
 	{
 		configAPIGroup.GET("", getConfigValues)
 		configAPIGroup.PATCH("", updateConfigValues)
 	}
 
 	// Token management endpoints
-	tokenAPIGroup := routerGroup.Group("/tokens", AuthHandler, AdminAuthHandler)
+	tokenAPIGroup := routerGroup.Group("/tokens", middleware.AuthHandler, middleware.AdminAuthHandler)
 	{
 		tokenAPIGroup.POST("", createApiToken)
 		tokenAPIGroup.DELETE("/:id", deleteApiToken)
@@ -618,7 +618,7 @@ func registerCommonEndpoints(routerGroup *gin.RouterGroup) error {
 	}
 
 	// Logging level management API
-	loggingAPI := routerGroup.Group("/logging", AuthHandler, AdminAuthHandler)
+	loggingAPI := routerGroup.Group("/logging", middleware.AuthHandler, middleware.AdminAuthHandler)
 	{
 		loggingAPI.POST("/level", HandleSetLogLevel)
 		loggingAPI.GET("/level", HandleGetLogLevel)
@@ -627,15 +627,15 @@ func registerCommonEndpoints(routerGroup *gin.RouterGroup) error {
 
 	downtimeAPI := routerGroup.Group("/downtime")
 	{
-		downtimeAPI.POST("", DowntimeAuthHandler, HandleCreateDowntime)
-		downtimeAPI.POST("/:uuid", DowntimeAuthHandler, HandleCreateDowntime)
+		downtimeAPI.POST("", middleware.DowntimeAuthHandler, HandleCreateDowntime)
+		downtimeAPI.POST("/:uuid", middleware.DowntimeAuthHandler, HandleCreateDowntime)
 		downtimeAPI.GET("", HandleGetDowntime)
 		downtimeAPI.GET("/:uuid", HandleGetDowntimeByUUID)
-		downtimeAPI.PUT("/:uuid", DowntimeAuthHandler, HandleUpdateDowntime)
-		downtimeAPI.DELETE("/:uuid", DowntimeAuthHandler, HandleDeleteDowntime)
+		downtimeAPI.PUT("/:uuid", middleware.DowntimeAuthHandler, HandleUpdateDowntime)
+		downtimeAPI.DELETE("/:uuid", middleware.DowntimeAuthHandler, HandleDeleteDowntime)
 	}
 
-	groupRouterGroup := routerGroup.Group("/groups", AuthHandler, AdminAuthHandler)
+	groupRouterGroup := routerGroup.Group("/groups", middleware.AuthHandler, middleware.AdminAuthHandler)
 	{
 		groupRouterGroup.GET("", handleListGroups)
 		groupRouterGroup.POST("", handleCreateGroup)
@@ -647,7 +647,7 @@ func registerCommonEndpoints(routerGroup *gin.RouterGroup) error {
 		groupRouterGroup.DELETE("/:id/members/:userId", handleRemoveGroupMember)
 	}
 
-	userRouterGroup := routerGroup.Group("/users", AuthHandler, AdminAuthHandler)
+	userRouterGroup := routerGroup.Group("/users", middleware.AuthHandler, middleware.AdminAuthHandler)
 	{
 		userRouterGroup.GET("", handleListUsers)
 		userRouterGroup.POST("", handleAddUser)
@@ -715,7 +715,7 @@ func configureMetrics(engine *gin.Engine) error {
 	if param.Server_HealthMonitoringPublic.GetBool() {
 		engine.GET("/api/v1.0/metrics/health", healthFunc)
 	} else {
-		engine.GET("/api/v1.0/metrics/health", AuthHandler, AdminAuthHandler, healthFunc)
+		engine.GET("/api/v1.0/metrics/health", middleware.AuthHandler, middleware.AdminAuthHandler, healthFunc)
 	}
 	return nil
 }
@@ -798,7 +798,7 @@ func ConfigureServerWebAPI(ctx context.Context, engine *gin.Engine, egrp *errgro
 		return nil
 	})
 
-	commonAPIGroup := engine.Group("/api/v1.0", ReadOnlyMiddleware)
+	commonAPIGroup := engine.Group("/api/v1.0", middleware.ReadOnlyMiddleware)
 	if err := registerCommonEndpoints(commonAPIGroup); err != nil {
 		return err
 	}

@@ -51,7 +51,7 @@ import (
 	"github.com/pelicanplatform/pelican/token"
 	"github.com/pelicanplatform/pelican/token_scopes"
 	"github.com/pelicanplatform/pelican/utils"
-	"github.com/pelicanplatform/pelican/web_ui"
+	"github.com/pelicanplatform/pelican/web_ui/middleware"
 )
 
 type (
@@ -1034,7 +1034,7 @@ func checkHostnameRedirects(c *gin.Context, incomingHost string) {
 // original request had been made to /api/v1.0/director/object/foo/bar
 func ShortcutMiddleware(defaultResponse string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		web_ui.ServerHeaderMiddleware(c)
+		middleware.ServerHeaderMiddleware(c)
 		corsHeadersMiddleware(c)
 
 		// If this is a OPTIONS request, we should just return OK
@@ -1796,7 +1796,7 @@ func collectDirectorRedirectionMetric(ctx *gin.Context, destination string) {
 func RegisterDirectorAPI(ctx context.Context, router *gin.RouterGroup) {
 	egrp := ctx.Value(config.EgrpKey).(*errgroup.Group)
 
-	directorAPIV1 := router.Group("/api/v1.0/director", web_ui.ServerHeaderMiddleware)
+	directorAPIV1 := router.Group("/api/v1.0/director", middleware.ServerHeaderMiddleware)
 	{
 		// Answer CORS preflight requests, trivial response inlined
 		directorAPIV1.OPTIONS("/*any", corsHeadersMiddleware, func(ctx *gin.Context) {
@@ -1831,7 +1831,7 @@ func RegisterDirectorAPI(ctx context.Context, router *gin.RouterGroup) {
 
 	}
 
-	directorAPIV2 := router.Group("/api/v2.0/director", web_ui.ServerHeaderMiddleware)
+	directorAPIV2 := router.Group("/api/v2.0/director", middleware.ServerHeaderMiddleware)
 	{
 		directorAPIV2.GET("/listNamespaces", listNamespacesV2)
 	}
