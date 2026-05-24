@@ -266,9 +266,7 @@ func (f *FedTest) Spinup() {
 	require.NoError(f.T, os.WriteFile(oidcClientSecretFile, []byte("test-client-secret"), 0644))
 	require.NoError(f.T, param.OIDC_ClientIDFile.Set(oidcClientIDFile))
 	require.NoError(f.T, param.OIDC_ClientSecretFile.Set(oidcClientSecretFile))
-
-	err = config.InitServer(ctx, modules)
-	require.NoError(f.T, err)
+	test_utils.InitServerForTest(f.T, ctx, modules)
 
 	require.NoError(f.T, param.Registry_RequireOriginApproval.Set(false))
 	require.NoError(f.T, param.Registry_RequireCacheApproval.Set(false))

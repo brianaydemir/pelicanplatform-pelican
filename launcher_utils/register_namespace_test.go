@@ -69,8 +69,7 @@ func TestRegistration(t *testing.T) {
 	test_utils.MockFederationRoot(t, nil, nil)
 	require.NoError(t, param.Registry_DbLocation.Set(""))
 	require.NoError(t, param.Server_DbLocation.Set(filepath.Join(tempConfigDir, "test.sql")))
-	err = config.InitServer(ctx, server_structs.OriginType)
-	require.NoError(t, err)
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 	err = database.InitServerDatabase(server_structs.RegistryType)
 	require.NoError(t, err)
@@ -101,7 +100,7 @@ func TestRegistration(t *testing.T) {
 	require.NoError(t, param.Origin_FederationPrefix.Set("/test123"))
 
 	// Re-run the InitServer to reflect the new RegistryUrl set above
-	require.NoError(t, config.InitServer(ctx, server_structs.OriginType))
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 	// Test registration succeeds
 	prefix := param.Origin_FederationPrefix.GetString()
@@ -200,8 +199,7 @@ func TestMultiKeysRegistration(t *testing.T) {
 
 	require.NoError(t, param.Registry_DbLocation.Set(""))
 	require.NoError(t, param.Server_DbLocation.Set(filepath.Join(tempConfigDir, "test.sql")))
-	err = config.InitServer(ctx, server_structs.OriginType)
-	require.NoError(t, err)
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 	err = database.InitServerDatabase(server_structs.RegistryType)
 	require.NoError(t, err)
@@ -263,7 +261,7 @@ func TestMultiKeysRegistration(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(keysDir, dirEntries[0].Name())))
 
 	// Re-run the InitServer to reflect the new RegistryUrl set above
-	require.NoError(t, config.InitServer(ctx, server_structs.OriginType))
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 	// Test registration succeeds
 	prefix := param.Origin_FederationPrefix.GetString()

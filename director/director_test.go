@@ -1612,8 +1612,7 @@ func TestDiscoverOriginCache(t *testing.T) {
 
 	// Isolate the test so it doesn't use system config
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
-	err = initServerForTest(t, ctx, server_structs.DirectorType)
-	require.NoError(t, err)
+	initServerForTest(t, ctx, server_structs.DirectorType)
 
 	fedInfo, err := config.GetFederation(ctx)
 	assert.NoError(t, err, "Error fetching federation info for test")

@@ -1102,9 +1102,7 @@ func TestMergeConfig(t *testing.T) {
 
 			err := os.WriteFile(scitokensConfigFile, []byte(configInput), fs.FileMode(0600))
 			require.NoError(t, err)
-
-			err = config.InitServer(ctx, server_structs.OriginType)
-			require.NoError(t, err)
+			test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 			err = EmitScitokensConfig(&origin.OriginServer{})
 			require.NoError(t, err)
@@ -1298,7 +1296,8 @@ func TestGenerateOriginIssuer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			defer server_utils.ResetTestState()
 			ctx, _, _ := test_utils.TestContext(context.Background(), t)
-			require.NoError(t, param.ConfigDir.Set(t.TempDir()))
+			cfgDir := t.TempDir()
+			require.NoError(t, param.ConfigDir.Set(cfgDir))
 			require.NoError(t, param.Logging_Level.Set("debug"))
 
 			test_utils.MockFederationRoot(t, nil, nil)
@@ -1321,9 +1320,7 @@ func TestGenerateOriginIssuer(t *testing.T) {
 				}
 				require.NoError(t, param.SetRaw(param.Origin_Exports.GetName(), exports))
 			}
-
-			err = config.InitServer(ctx, server_structs.OriginType)
-			require.NoError(t, err)
+			test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 			// Set extra params if provided
 			for p, val := range tc.extraParams {
@@ -1602,9 +1599,7 @@ func TestGenerateFederationIssuer(t *testing.T) {
 			require.NoError(t, param.TLSSkipVerify.Set(true))
 
 			test_utils.MockFederationRoot(t, nil, nil)
-
-			err := config.InitServer(ctx, server_structs.OriginType)
-			require.NoError(t, err)
+			test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 			issuer, err := GenerateFederationIssuer()
 			require.NoError(t, err)
@@ -1640,9 +1635,7 @@ func TestWriteOriginScitokensConfig(t *testing.T) {
 	require.NoError(t, param.Origin_StorageType.Set(string(server_structs.OriginStoragePosix)))
 
 	test_utils.MockFederationRoot(t, nil, nil)
-
-	err := config.InitServer(ctx, server_structs.OriginType)
-	require.NoError(t, err)
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 	// Since this test asserts the static config from resources/test-scitokens-monitoring.cfg
 	// matches the generated/written config, we need to force WriteOriginScitokensConfig to find a
@@ -1651,7 +1644,7 @@ func TestWriteOriginScitokensConfig(t *testing.T) {
 	config.SetFederation(pelican_url.FederationDiscovery{DiscoveryEndpoint: "https://federation.example.com/discovery"})
 
 	scitokensCfg := param.Xrootd_ScitokensConfig.GetString()
-	err = config.MkdirAll(filepath.Dir(scitokensCfg), 0755, -1, -1)
+	err := config.MkdirAll(filepath.Dir(scitokensCfg), 0755, -1, -1)
 	require.NoError(t, err)
 	err = os.WriteFile(scitokensCfg, []byte(toMergeOutput), 0640)
 	require.NoError(t, err)

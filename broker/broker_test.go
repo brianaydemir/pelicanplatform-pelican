@@ -145,11 +145,9 @@ func Setup(t *testing.T, ctx context.Context, egrp *errgroup.Group) {
 	require.NoError(t, param.Origin_FederationPrefix.Set("/foo"))
 
 	test_utils.MockFederationRoot(t, nil, nil)
+	test_utils.InitServerForTest(t, ctx, server_structs.BrokerType)
 
-	err := config.InitServer(ctx, server_structs.BrokerType)
-	require.NoError(t, err)
-
-	err = database.InitServerDatabase(server_structs.RegistryType)
+	err := database.InitServerDatabase(server_structs.RegistryType)
 	require.NoError(t, err)
 
 	keyset, err := config.GetIssuerPublicJWKS()

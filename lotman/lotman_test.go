@@ -127,8 +127,9 @@ func setupLotmanFromConf(t *testing.T, readConfig bool, name string, discUrl str
 	} else {
 		// If we're not reading from the embedded yaml, grab the
 		// default configuration. We need _some_ configuration to work.
-		require.NoError(t, param.ConfigDir.Set(t.TempDir()))
-		_ = config.InitServer(context.Background(), server_structs.CacheType)
+		configDir := t.TempDir()
+		require.NoError(t, param.ConfigDir.Set(configDir))
+		test_utils.InitServerForTest(t, context.Background(), server_structs.CacheType)
 	}
 
 	tmpPathPattern := name + "*"

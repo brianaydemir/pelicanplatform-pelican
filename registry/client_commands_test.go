@@ -61,9 +61,7 @@ func registryMockup(ctx context.Context, t *testing.T, testName string) *httptes
 	require.NoError(t, param.Server_DbLocation.Set(filepath.Join(issuerTempDir, "test.sql")))
 	require.NoError(t, param.Server_WebPort.Set(8444))
 	require.NoError(t, param.ConfigDir.Set(tDir))
-
-	err := config.InitServer(ctx, server_structs.RegistryType)
-	require.NoError(t, err)
+	test_utils.InitServerForTest(t, ctx, server_structs.RegistryType)
 
 	setupMockRegistryDB(t)
 
@@ -432,8 +430,7 @@ func TestRegistryKeyChainingOSDF(t *testing.T) {
 	tDir2 := t.TempDir()
 	require.NoError(t, param.IssuerKeysDirectory.Set(tDir2+"/keychaining2"))
 	require.NoError(t, param.ConfigDir.Set(tDir2))
-	err = config.InitServer(ctx, server_structs.RegistryType)
-	require.NoError(t, err)
+	test_utils.InitServerForTest(t, ctx, server_structs.RegistryType)
 
 	privKey, err = config.GetIssuerPrivateJWK()
 	require.NoError(t, err)
@@ -510,10 +507,11 @@ func TestRegistryKeyChaining(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now we create a new key and try to use it to register a super/sub space. These shouldn't succeed
-	require.NoError(t, param.IssuerKeysDirectory.Set(t.TempDir()+"/keychaining2"))
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
-	err = config.InitServer(ctx, server_structs.RegistryType)
-	require.NoError(t, err)
+	issuerKeysDir := t.TempDir()
+	cfgDir := t.TempDir()
+	require.NoError(t, param.IssuerKeysDirectory.Set(issuerKeysDir+"/keychaining2"))
+	require.NoError(t, param.ConfigDir.Set(cfgDir))
+	test_utils.InitServerForTest(t, ctx, server_structs.RegistryType)
 
 	privKey, err = config.GetIssuerPrivateJWK()
 	require.NoError(t, err)

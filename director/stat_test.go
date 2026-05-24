@@ -876,7 +876,7 @@ func TestCache(t *testing.T) {
 	)
 	initMockStatUtils()
 	t.Cleanup(cleanupMock)
-	require.NoError(t, initServerForTest(t, context.Background(), server_structs.DirectorType))
+	initServerForTest(t, context.Background(), server_structs.DirectorType)
 
 	t.Run("repeated-cache-access-found", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -973,8 +973,7 @@ func TestSendHeadReq(t *testing.T) {
 
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 
-	err = initServerForTest(t, context.Background(), server_structs.DirectorType)
-	require.NoError(t, err)
+	initServerForTest(t, context.Background(), server_structs.DirectorType)
 
 	t.Run("correct-input-gives-no-error", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())

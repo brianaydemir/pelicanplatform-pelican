@@ -85,8 +85,7 @@ func TestVerifyAdvertiseToken(t *testing.T) {
 
 	// Mock cached jwks
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
-	err := initServerForTest(t, ctx, server_structs.DirectorType)
-	require.NoError(t, err)
+	initServerForTest(t, ctx, server_structs.DirectorType)
 
 	kSet, err := config.GetIssuerPublicJWKS()
 	require.NoError(t, err)
@@ -275,8 +274,7 @@ func TestNamespaceKeysCacheTTLExpiration(t *testing.T) {
 		require.NoError(t, param.Director_AdvertisementTTL.Set(originalTTL))
 	})
 
-	err = initServerForTest(t, ctx, server_structs.DirectorType)
-	require.NoError(t, err)
+	initServerForTest(t, ctx, server_structs.DirectorType)
 
 	// Start the TTL cache
 	LaunchTTLCache(ctx, egrp)

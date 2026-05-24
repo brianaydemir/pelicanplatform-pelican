@@ -48,13 +48,12 @@ func TestResetPassword(t *testing.T) {
 	require.NoError(t, param.ConfigDir.Set(dirName))
 	require.NoError(t, param.Server_WebPort.Set(8444))
 	require.NoError(t, param.Origin_Port.Set(8443))
-	err := config.InitServer(ctx, server_structs.OriginType)
-	require.NoError(t, err)
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 	rootCmd.SetArgs([]string{"origin", "web-ui", "reset-password", "--stdin"})
 	byteBuffer := bytes.NewReader([]byte("1234"))
 	rootCmd.SetIn(byteBuffer)
-	err = rootCmd.Execute()
+	err := rootCmd.Execute()
 	require.NoError(t, err)
 
 	fileName := param.Server_UIPasswordFile.GetString()

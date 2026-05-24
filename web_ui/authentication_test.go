@@ -39,7 +39,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
-	"github.com/pelicanplatform/pelican/config"
 	"github.com/pelicanplatform/pelican/database"
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/server_structs"
@@ -77,8 +76,7 @@ func TestWaitUntilLogin(t *testing.T) {
 	require.NoError(t, param.ConfigDir.Set(dirName))
 
 	test_utils.MockFederationRoot(t, nil, nil)
-	err := config.InitServer(ctx, server_structs.OriginType)
-	require.NoError(t, err)
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 	go func() {
 		err := waitUntilLogin(ctx)
 		require.NoError(t, err)

@@ -109,8 +109,7 @@ func originMockup(ctx context.Context, egrp *errgroup.Group, t *testing.T) conte
 
 	// Increase the log level; otherwise, its difficult to debug failures
 	require.NoError(t, param.Logging_Level.Set("Debug"))
-	err = config.InitServer(ctx, server_structs.OriginType)
-	require.NoError(t, err)
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 	err = config.GeneratePrivateKey(param.Server_TLSKey.GetString(), elliptic.P256(), false)
 	require.NoError(t, err)
@@ -265,9 +264,9 @@ func TestMultiExportOrigin(t *testing.T) {
 	test_utils.MockFederationRoot(t, nil, nil)
 
 	// Initialize the origin before getting origin exports
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
-	err = config.InitServer(ctx, server_structs.OriginType)
-	require.NoError(t, err)
+	cfgDir := t.TempDir()
+	require.NoError(t, param.ConfigDir.Set(cfgDir))
+	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 
 	originExports, err := server_utils.GetOriginExports()
 	require.NoError(t, err)

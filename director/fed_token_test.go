@@ -256,8 +256,7 @@ func TestCreateFedTok(t *testing.T) {
 				BrokerEndpoint:    "https://dne-broker.com",
 			}
 			config.SetFederation(fed)
-			err := initServerForTest(t, c, server_structs.RegistryType) // Helps us populate the keys directory with a signing key
-			require.NoError(t, err)
+			initServerForTest(t, c, server_structs.RegistryType) // Helps us populate the keys directory with a signing key
 
 			allowedPrefixesForCaches.Store(&tc.allowedPrefixes)
 			rInfo := requestInfo{
