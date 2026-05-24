@@ -45,6 +45,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
@@ -52,6 +53,7 @@ import (
 	"github.com/pelicanplatform/pelican/logging"
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/pelican_url"
+	"github.com/pelicanplatform/pelican/server_structs"
 )
 
 func TestContext(ictx context.Context, t testing.TB) (ctx context.Context, cancel context.CancelFunc, egrp *errgroup.Group) {
@@ -612,6 +614,30 @@ func formatEntry(entry *logrus.Entry) string {
 	}
 
 	return fmt.Sprintf("%s %s%s %s", entry.Time.Format(time.RFC3339Nano), loc, entry.Level, msg)
+}
+
+// InitServerTLSForTest redirects all TLS key and certificate parameters
+// to paths inside dir, isolating tests from host configuration.
+// Call after ResetTestState and before InitServer;
+// the caller is responsible for certificate generation.
+func InitServerTLSForTest(t testing.TB, dir string) {
+	t.Helper()
+	require.NoError(t, param.Server_TLSKey.Set(filepath.Join(dir, "tls.key")))
+	require.NoError(t, param.Server_TLSCertificateChain.Set(filepath.Join(dir, "tls.crt")))
+	require.NoError(t, param.Server_TLSCACertificateFile.Set(filepath.Join(dir, "ca.crt")))
+	require.NoError(t, param.Server_TLSCAKey.Set(filepath.Join(dir, "ca.key")))
+}
+
+// InitServerForTest redirects TLS parameters to param.ConfigDir,
+// then calls config.InitServer.
+// param.ConfigDir must already be set to a test-owned directory.
+// Call after ResetTestState.
+func InitServerForTest(t testing.TB, ctx context.Context, serverType server_structs.ServerType) {
+	t.Helper()
+	// param.ConfigDir.GetString() always returns "" — ConfigDir is a special
+	// internal key not in parameters.yaml and therefore absent from stringAccessors.
+	InitServerTLSForTest(t, viper.GetString("ConfigDir"))
+	require.NoError(t, config.InitServer(ctx, serverType))
 }
 
 // Helper function for other tests who call server_utils.GetOriginExports() internally.
