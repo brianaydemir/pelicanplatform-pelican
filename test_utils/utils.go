@@ -702,6 +702,10 @@ func InitServerTLSForTest(t testing.TB, dir string) {
 // It writes an empty pelican.yaml into ConfigDir to shadow
 // /etc/pelican/pelican.yaml, and clears all federation URL overrides.
 //
+// Unless the caller has already set Server.Hostname,
+// this helper pins it to "localhost" so that generated TLS certificates
+// and hostname validation are consistent.
+//
 // config.InitServer calls GetFederation eagerly; ErrNoDiscoveryEndpoint
 // (returned when no federation URL is configured) is treated as a clean
 // "no federation" state. Call MockFederationRoot afterward to add one.
@@ -734,6 +738,14 @@ func InitServerForTest(t testing.TB, ctx context.Context, serverType server_stru
 	// to GetFederation() would attempt a live HTTP discovery call to
 	// osg-htc.org.
 	ClearFederationURLsForTest(t)
+
+	// Lock the hostname to "localhost" so that generated TLS certificates
+	// match the hostname used for validation, unless the caller has already
+	// chosen a specific hostname.
+	// Without this, Pelican defaults to os.Hostname().
+	if !param.Server_Hostname.IsSet() {
+		require.NoError(t, param.Server_Hostname.Set("localhost"))
+	}
 
 	InitServerTLSForTest(t, cfgDir)
 	err := config.InitServer(ctx, serverType)

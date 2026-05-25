@@ -589,6 +589,14 @@ func TestDeprecationHandling(t *testing.T) {
 	require.NoError(t, param.ConfigDir.Set(tmpConfigDirPath))
 	require.NoError(t, param.Logging_Level.Set("Warning"))
 
+	// Write an empty pelican.yaml so that InitConfigInternal
+	// uses this file and never falls through to any ambient pelican.yaml
+	// on the host.
+	// Without this, an ambient config may set Server.TLSCertificateChain
+	// to an existing certificate before handleDeprecatedConfig runs,
+	// causing it to silently skip the deprecated-key propagation we are testing.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpConfigDirPath, "pelican.yaml"), []byte{}, 0600))
+
 	// Set the deprecated config parameter `Server.TLSCertificate`.
 	// This parameter is replaced by the new `Server.TLSCertificateChain`.
 	require.NoError(t, param.Server_TLSCertificate.Set(tlsCertPath))
