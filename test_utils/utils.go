@@ -696,8 +696,10 @@ func InitServerTLSForTest(t testing.TB, dir string) {
 
 // InitServerForTest prepares a test-owned server configuration
 // and calls config.InitServer.
-// It requires param.ConfigDir to already point to a test-owned directory,
-// and must be called after ResetTestState.
+// Must be called after ResetTestState.
+//
+// If the caller has not set param.ConfigDir,
+// a fresh t.TempDir() is allocated and assigned to it.
 //
 // It writes an empty pelican.yaml into ConfigDir to shadow
 // /etc/pelican/pelican.yaml, and clears all federation URL overrides.
@@ -716,6 +718,13 @@ func InitServerForTest(t testing.TB, ctx context.Context, serverType server_stru
 	// ConfigDir is a special internal key absent from parameters.yaml
 	// and therefore absent from the typed string accessors.
 	cfgDir := viper.GetString("ConfigDir")
+	if cfgDir == "" {
+		// Allocate an isolated ConfigDir on the caller's behalf
+		// rather than silently writing pelican.yaml to the current
+		// working directory.
+		cfgDir = t.TempDir()
+		require.NoError(t, param.ConfigDir.Set(cfgDir))
+	}
 	require.NoError(t, os.MkdirAll(cfgDir, 0700))
 
 	// Pelican configures itself using the first `pelican.yaml` file
