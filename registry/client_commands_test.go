@@ -53,7 +53,6 @@ func registryMockup(ctx context.Context, t *testing.T, testName string) *httptes
 	svr := httptest.NewServer(engine)
 
 	fedInfo := pelican_url.FederationDiscovery{RegistryEndpoint: svr.URL}
-	test_utils.MockFederationRoot(t, &fedInfo, nil)
 
 	issuerTempDir := filepath.Join(tDir, testName)
 	ikeyDir := filepath.Join(issuerTempDir, "issuer-keys")
@@ -62,6 +61,7 @@ func registryMockup(ctx context.Context, t *testing.T, testName string) *httptes
 	require.NoError(t, param.Server_WebPort.Set(8444))
 	require.NoError(t, param.ConfigDir.Set(tDir))
 	test_utils.InitServerForTest(t, ctx, server_structs.RegistryType)
+	test_utils.MockFederationRoot(t, &fedInfo, nil)
 
 	setupMockRegistryDB(t)
 

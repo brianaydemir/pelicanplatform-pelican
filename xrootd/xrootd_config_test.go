@@ -62,8 +62,8 @@ func setupXrootd(t *testing.T, ctx context.Context, server server_structs.Server
 	require.NoError(t, param.Origin_FederationPrefix.Set("/"))
 	require.NoError(t, param.Server_IssuerUrl.Set("https://my-xrootd.com:8444"))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	if param.Xrootd_LocalMonitoringPort.GetInt() <= 0 {
 		require.NoError(t, SetUpMonitoring(ctx, egrp))
@@ -197,8 +197,8 @@ func TestXrootDCacheConfig(t *testing.T) {
 
 	require.NoError(t, param.Cache_RunLocation.Set(dirname))
 	require.NoError(t, param.ConfigDir.Set(dirname))
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.CacheType)
+	test_utils.MockFederationRoot(t, nil, nil)
 	require.NoError(t, SetUpMonitoring(ctx, egrp))
 
 	configPath, err := ConfigXrootd(ctx, false)
@@ -377,8 +377,8 @@ func TestUpdateAuth(t *testing.T) {
 	require.NoError(t, param.Origin_FederationPrefix.Set("/test"))
 	require.NoError(t, param.Origin_StoragePrefix.Set(test_utils.GetTmpStoragePrefixDir(t)))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	scitokensCfgDemo := `
 [Issuer DEMO]
@@ -472,7 +472,6 @@ func TestCopyCertificates(t *testing.T) {
 	require.NoError(t, param.Origin_RunLocation.Set(runDirname))
 	require.NoError(t, param.ConfigDir.Set(configDirname))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerTLSForTest(t, configDirname)
 
 	// First, invoke CopyXrootdCertificates directly, ensure it works.
@@ -480,6 +479,7 @@ func TestCopyCertificates(t *testing.T) {
 	assert.ErrorIs(t, err, errBadKeyPair)
 
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 	err = config.MkdirAll(path.Dir(param.Xrootd_Authfile.GetString()), 0755, -1, -1)
 	require.NoError(t, err)
 	err = copyXrootdCertificates(&origin.OriginServer{})
@@ -566,8 +566,8 @@ func TestCopyCertificatesWithPKCS11(t *testing.T) {
 	require.NoError(t, param.Origin_RunLocation.Set(runDir))
 	require.NoError(t, param.ConfigDir.Set(configDir))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	require.NoError(t, param.Server_EnablePKCS11.Set(true))
 
@@ -777,8 +777,8 @@ func TestAutoShutdownOnStaleAuthfile(t *testing.T) {
 	require.NoError(t, os.WriteFile(scitokensPath, []byte(""), 0600))
 	require.NoError(t, param.Xrootd_ScitokensConfig.Set(scitokensPath))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.CacheType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	// Init cache server
 
@@ -849,8 +849,8 @@ func TestConfigUpdatesHealthOKWhenFresh(t *testing.T) {
 	require.NoError(t, os.WriteFile(scitokensPath, []byte(""), 0600))
 	require.NoError(t, param.Xrootd_ScitokensConfig.Set(scitokensPath))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.CacheType)
+	test_utils.MockFederationRoot(t, nil, nil)
 	cacheServer := &cache.CacheServer{}
 
 	LaunchXrootdMaintenance(ctx, cacheServer, 20*time.Millisecond)

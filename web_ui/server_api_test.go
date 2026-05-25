@@ -101,8 +101,8 @@ func TestDowntime(t *testing.T) {
 	fInfo := &pelican_url.FederationDiscovery{
 		RegistryEndpoint: mockRegistry.URL,
 	}
-	test_utils.MockFederationRoot(t, fInfo, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, fInfo, nil)
 
 	r := setupRouter()
 	activeDowntime := server_structs.Downtime{

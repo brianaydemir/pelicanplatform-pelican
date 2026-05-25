@@ -69,8 +69,8 @@ func TestPrometheusUnprotected(t *testing.T) {
 	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	w := httptest.NewRecorder()
 	c, r := gin.CreateTestContext(w)
@@ -116,8 +116,8 @@ func TestPrometheusProtectionCookieAuth(t *testing.T) {
 	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	w := httptest.NewRecorder()
 	c, r := gin.CreateTestContext(w)
@@ -187,8 +187,8 @@ func TestPrometheusProtectionOriginHeaderScope(t *testing.T) {
 	})
 	require.NoError(t, param.ConfigDir.Set(configDir))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	issuerUrl := config.GetLocalIssuerUrl()
 
@@ -323,8 +323,8 @@ func TestPrometheusRulesEndpoint(t *testing.T) {
 	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	w := httptest.NewRecorder()
 	c, r := gin.CreateTestContext(w)
@@ -406,8 +406,8 @@ func TestPrometheusAlertsEndpoint(t *testing.T) {
 	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	require.NoError(t, param.Monitoring_PromQLAuthorization.Set(false))
 	require.NoError(t, param.Server_ExternalWebUrl.Set("https://test-origin.org:8444"))

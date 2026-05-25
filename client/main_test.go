@@ -156,7 +156,7 @@ func TestGetToken(t *testing.T) {
 	server_utils.ResetTestState()
 	defer server_utils.ResetTestState()
 
-	test_utils.InitClient(t, nil)
+	test_utils.InitClientForTest(t, nil)
 
 	mock.MockTopology(t, config.GetTransport())
 
@@ -502,7 +502,7 @@ func TestParseRemoteAsPUrl(t *testing.T) {
 				configOpts[param.Federation_DirectorUrl] = test.dirEP
 			}
 
-			test_utils.InitClient(t, configOpts)
+			test_utils.InitClientForTest(t, configOpts)
 
 			pUrl, err := ParseRemoteAsPUrl(context.Background(), test.rp)
 			if test.expectErr {

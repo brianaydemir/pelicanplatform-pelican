@@ -75,8 +75,8 @@ func TestWaitUntilLogin(t *testing.T) {
 	server_utils.ResetTestState()
 	require.NoError(t, param.ConfigDir.Set(dirName))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 	go func() {
 		err := waitUntilLogin(ctx)
 		require.NoError(t, err)

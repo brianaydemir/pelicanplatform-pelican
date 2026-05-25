@@ -54,8 +54,8 @@ func setupPingEngine(t *testing.T, ctx context.Context, egrp *errgroup.Group) (c
 	require.NoError(t, param.Server_WebPort.Set(8444))
 	require.NoError(t, param.Origin_Port.Set(8443))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 	ctx, cancel := context.WithCancel(ctx)
 
 	engine, err := GetEngine()

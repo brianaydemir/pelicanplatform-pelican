@@ -81,11 +81,11 @@ func TestVerifyAdvertiseToken(t *testing.T) {
 
 	// Spin up mock federation discovery endpoint with embedded mock registry URL.
 	fedInfo := pelican_url.FederationDiscovery{RegistryEndpoint: ts.URL}
-	test_utils.MockFederationRoot(t, &fedInfo, nil)
 
 	// Mock cached jwks
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 	initServerForTest(t, ctx, server_structs.DirectorType)
+	test_utils.MockFederationRoot(t, &fedInfo, nil)
 
 	kSet, err := config.GetIssuerPublicJWKS()
 	require.NoError(t, err)
@@ -258,7 +258,6 @@ func TestNamespaceKeysCacheTTLExpiration(t *testing.T) {
 
 	// Spin up mock federation discovery endpoint with embedded mock registry URL.
 	fedInfo := pelican_url.FederationDiscovery{RegistryEndpoint: registryServerURL}
-	test_utils.MockFederationRoot(t, &fedInfo, nil)
 
 	// Initialize director
 	tDir := t.TempDir()
@@ -275,6 +274,7 @@ func TestNamespaceKeysCacheTTLExpiration(t *testing.T) {
 	})
 
 	initServerForTest(t, ctx, server_structs.DirectorType)
+	test_utils.MockFederationRoot(t, &fedInfo, nil)
 
 	// Start the TTL cache
 	LaunchTTLCache(ctx, egrp)

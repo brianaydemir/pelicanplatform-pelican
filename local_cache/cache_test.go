@@ -446,7 +446,7 @@ func TestLargeFile(t *testing.T) {
 		param.Client_MaximumDownloadSpeed:     40 * 1024 * 1024,
 		param.Transport_ResponseHeaderTimeout: "60s",
 	}
-	test_utils.InitClient(t, clientConfig)
+	test_utils.InitClientForTest(t, clientConfig)
 	ft := fed_test_utils.NewFedTest(t, pubOriginCfg)
 
 	ctx, cancel, egrp := test_utils.TestContext(context.Background(), t)

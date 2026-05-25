@@ -227,7 +227,7 @@ func TestCompareMetadata(t *testing.T) {
 			RegistryEndpoint: "https://registry.example.com",
 		}
 		test_utils.MockFederationRoot(t, &fedInfo, nil)
-		test_utils.InitClient(t, map[param.Param]any{
+		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: "https://director.example.com",
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
@@ -255,7 +255,7 @@ func TestCompareMetadata(t *testing.T) {
 			RegistryEndpoint: "https://registry.example.com",
 		}
 		test_utils.MockFederationRoot(t, &fedInfo, nil)
-		test_utils.InitClient(t, map[param.Param]any{
+		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DirectorUrl: "https://director.example.com",
 			param.Federation_RegistryUrl: "https://registry.example.com",
 			param.Server_ExternalWebUrl:  "https://director.example.com",
@@ -300,7 +300,7 @@ func TestCompareMetadata(t *testing.T) {
 			DiscoveryEndpoint: discoveryServer.URL,
 		}
 		test_utils.MockFederationRoot(t, &localFedInfo, nil)
-		test_utils.InitClient(t, map[param.Param]any{
+		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: discoveryServer.URL,
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
@@ -350,7 +350,7 @@ func TestCompareMetadata(t *testing.T) {
 			DiscoveryEndpoint: discoveryServer.URL,
 		}
 		test_utils.MockFederationRoot(t, &localFedInfo, nil)
-		test_utils.InitClient(t, map[param.Param]any{
+		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: discoveryServer.URL,
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
@@ -399,7 +399,7 @@ func TestCompareMetadata(t *testing.T) {
 			DiscoveryEndpoint: discoveryServer.URL,
 		}
 		test_utils.MockFederationRoot(t, &localFedInfo, nil)
-		test_utils.InitClient(t, map[param.Param]any{
+		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: discoveryServer.URL,
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
@@ -433,7 +433,7 @@ func TestCompareAndStoreMetadataDiscrepancy(t *testing.T) {
 			RegistryEndpoint: "https://registry.example.com",
 		}
 		test_utils.MockFederationRoot(t, &fedInfo, nil)
-		test_utils.InitClient(t, map[param.Param]any{
+		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: "https://director.example.com",
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
@@ -466,7 +466,7 @@ func TestLaunchMetadataComparisonLoop(t *testing.T) {
 			RegistryEndpoint: "https://registry.example.com",
 		}
 		test_utils.MockFederationRoot(t, &fedInfo, nil)
-		test_utils.InitClient(t, map[param.Param]any{
+		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: "https://director.example.com",
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",

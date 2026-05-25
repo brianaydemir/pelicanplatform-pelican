@@ -34,7 +34,7 @@ import (
 func TestGetCacheHostnameFromToken(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
 	server_utils.ResetTestState()
-	test_utils.InitClient(t, nil)
+	test_utils.InitClientForTest(t, nil)
 
 	test_utils.MockFederationRoot(t, &pelican_url.FederationDiscovery{
 		RegistryEndpoint: "https://your-registry.com",

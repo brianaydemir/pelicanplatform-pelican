@@ -106,6 +106,17 @@ func mockFederationRoot(t *testing.T) string {
 	// Cleanup, cleanup, everybody do your share!
 	t.Cleanup(server.Close)
 
+	// Clear the four OpaqueParam federation URL fields via their viper keys; the
+	// resulting override values (empty strings) have higher priority than file config
+	// and therefore survive any subsequent MergeInConfig call. This prevents
+	// /etc/pelican/pelican.yaml from populating DirectorUrl/RegistryUrl/etc. and
+	// causing discoverFederationImpl to short-circuit without querying the mock.
+	// Note: this is a manual equivalent of test_utils.ClearFederationURLsForTest,
+	// which cannot be used here due to the import cycle between config and test_utils.
+	require.NoError(t, param.Set(param.Federation_DirectorUrl, ""))
+	require.NoError(t, param.Set(param.Federation_RegistryUrl, ""))
+	require.NoError(t, param.Set(param.Federation_JwkUrl, ""))
+	require.NoError(t, param.Set(param.Federation_BrokerUrl, ""))
 	require.NoError(t, param.TLSSkipVerify.Set(true))
 	require.NoError(t, param.Federation_DiscoveryUrl.Set(server.URL))
 
@@ -733,7 +744,31 @@ func TestInitServerUrl(t *testing.T) {
 	})
 	initConfig := func() {
 		ResetConfig()
-		mockFederationRoot(t)
+		// Clear the four OpaqueParam federation URL fields so that
+		// discoverFederationImpl does not short-circuit. The empty override
+		// values survive the subsequent MergeInConfig inside InitServer.
+		// (Equivalent to test_utils.ClearFederationURLsForTest, but reproduced
+		// here to avoid the config↔test_utils import cycle.)
+		require.NoError(t, param.Set(param.Federation_DirectorUrl, ""))
+		require.NoError(t, param.Set(param.Federation_RegistryUrl, ""))
+		require.NoError(t, param.Set(param.Federation_JwkUrl, ""))
+		require.NoError(t, param.Set(param.Federation_BrokerUrl, ""))
+		// Minimal discovery server that returns only a DiscoveryEndpoint.
+		// Director/registry/broker endpoints are left empty so InitServer fills
+		// them from Server_Hostname + Server_WebPort — which is what this test
+		// is exercising.
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/.well-known/pelican-configuration" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{}`))
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+		t.Cleanup(srv.Close)
+		require.NoError(t, param.TLSSkipVerify.Set(true))
+		require.NoError(t, param.Federation_DiscoveryUrl.Set(srv.URL))
 		tempDir := t.TempDir()
 		require.NoError(t, param.ConfigDir.Set(tempDir))
 	}

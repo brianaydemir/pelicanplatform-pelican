@@ -128,7 +128,7 @@ func TestFederationDiscoveryHandler(t *testing.T) {
 			server_utils.ResetTestState()
 			fedInfo := pelican_url.FederationDiscovery{DirectorEndpoint: tc.dirUrl, RegistryEndpoint: tc.regUrl}
 			test_utils.MockFederationRoot(t, &fedInfo, nil)
-			test_utils.InitClient(t, map[param.Param]any{
+			test_utils.InitClientForTest(t, map[param.Param]any{
 				param.Federation_DiscoveryUrl: param.Federation_DiscoveryUrl.GetString(),
 				param.Federation_DirectorUrl:  tc.dirUrl,
 				param.Federation_RegistryUrl:  tc.regUrl,
@@ -202,7 +202,7 @@ func TestOidcDiscoveryHandler(t *testing.T) {
 			server_utils.ResetTestState()
 			fedInfo := pelican_url.FederationDiscovery{DirectorEndpoint: tc.dirUrl}
 			test_utils.MockFederationRoot(t, &fedInfo, nil)
-			test_utils.InitClient(t, map[param.Param]any{
+			test_utils.InitClientForTest(t, map[param.Param]any{
 				param.Federation_DiscoveryUrl: param.Federation_DiscoveryUrl.GetString(),
 				param.Federation_DirectorUrl:  tc.dirUrl,
 				param.TLSSkipVerify:           true,

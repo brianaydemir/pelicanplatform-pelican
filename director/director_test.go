@@ -1604,8 +1604,6 @@ func TestDiscoverOriginCache(t *testing.T) {
 
 	require.NoError(t, param.TLSSkipVerify.Set(true))
 
-	// Set up the mock federation, which must exist for the auth handler to fetch federation keys
-	test_utils.MockFederationRoot(t, nil, &pKeySet)
 	ctx, cancel, egrp := test_utils.TestContext(context.Background(), t)
 	defer func() { require.NoError(t, egrp.Wait()) }()
 	defer cancel()
@@ -1613,6 +1611,8 @@ func TestDiscoverOriginCache(t *testing.T) {
 	// Isolate the test so it doesn't use system config
 	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 	initServerForTest(t, ctx, server_structs.DirectorType)
+	// Set up the mock federation so auth-related discovery happens after init resets discovery config.
+	test_utils.MockFederationRoot(t, nil, &pKeySet)
 
 	fedInfo, err := config.GetFederation(ctx)
 	assert.NoError(t, err, "Error fetching federation info for test")

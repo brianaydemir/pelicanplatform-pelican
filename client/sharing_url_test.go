@@ -129,7 +129,7 @@ func TestSharingUrl(t *testing.T) {
 	os.Setenv("PELICAN_SKIP_TERMINAL_CHECK", "password")
 	defer os.Unsetenv("PELICAN_SKIP_TERMINAL_CHECK")
 
-	test_utils.InitClient(t, map[param.Param]any{
+	test_utils.InitClientForTest(t, map[param.Param]any{
 		param.Logging_Level:           "debug",
 		param.TLSSkipVerify:           true,
 		param.Federation_DiscoveryUrl: server.URL,

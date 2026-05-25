@@ -1720,13 +1720,10 @@ func TestWriteTransferErrorMessage(t *testing.T) {
 
 func TestTransferError404(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	server_utils.ResetTestState()
 	defer server_utils.ResetTestState()
 
 	// Isolate the test so it doesn't use system config
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
-	err := config.InitClient()
-	require.NoError(t, err)
+	test_utils.InitClientForTest(t, nil)
 
 	// Second server that returns 404
 	secondServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1820,13 +1817,10 @@ func TestTransferError404(t *testing.T) {
 
 func TestTransferErrorSlowTransfer(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	server_utils.ResetTestState()
 	defer server_utils.ResetTestState()
 
 	// Isolate the test so it doesn't use system config
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
-	err := config.InitClient()
-	require.NoError(t, err)
+	test_utils.InitClientForTest(t, nil)
 
 	// Create a server that sends data very slowly
 	body := strings.Repeat("Hello, World!", 1000) // ~13KB of data
@@ -1999,13 +1993,10 @@ func TestTransferErrorDirectorTimeout(t *testing.T) {
 
 func TestTransferErrorHeaderTimeout(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	server_utils.ResetTestState()
 	defer server_utils.ResetTestState()
 
 	// Isolate the test so it doesn't use system config
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
-	err := config.InitClient()
-	require.NoError(t, err)
+	test_utils.InitClientForTest(t, nil)
 
 	// Create a server that sleeps before sending any response
 	timeoutServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

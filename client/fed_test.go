@@ -896,7 +896,7 @@ func TestObjectList(t *testing.T) {
 // func TestObjectList405Error(t *testing.T) {
 // 	server_utils.ResetTestState()
 // 	defer server_utils.ResetTestState()
-// 	test_utils.InitClient(t, nil)
+// 	test_utils.InitClientForTest(t, nil)
 
 // 	var storageName string
 
@@ -934,7 +934,7 @@ func TestObjectList(t *testing.T) {
 func TestClientUnpack(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
 	server_utils.ResetTestState()
-	test_utils.InitClient(t, nil)
+	test_utils.InitClientForTest(t, nil)
 
 	fed := fed_test_utils.NewFedTest(t, bothPublicOriginCfg)
 	export := fed.Exports[0]

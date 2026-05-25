@@ -44,11 +44,11 @@ func TestResetPassword(t *testing.T) {
 
 	dirName := t.TempDir()
 	server_utils.ResetTestState()
-	test_utils.MockFederationRoot(t, nil, nil)
 	require.NoError(t, param.ConfigDir.Set(dirName))
 	require.NoError(t, param.Server_WebPort.Set(8444))
 	require.NoError(t, param.Origin_Port.Set(8443))
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	rootCmd.SetArgs([]string{"origin", "web-ui", "reset-password", "--stdin"})
 	byteBuffer := bytes.NewReader([]byte("1234"))

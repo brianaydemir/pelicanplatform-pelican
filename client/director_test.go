@@ -113,7 +113,7 @@ func TestQueryDirector(t *testing.T) {
 	server_utils.ResetTestState()
 	defer server_utils.ResetTestState()
 	// This test assumes the debugging level is at debug or higher
-	test_utils.InitClient(t, map[param.Param]any{
+	test_utils.InitClientForTest(t, map[param.Param]any{
 		param.Client_DirectorRetries: 3,
 		param.Logging_Level:          "debug",
 	})
@@ -335,7 +335,7 @@ func TestDirectorDecisionInfo(t *testing.T) {
 	server_utils.ResetTestState()
 	defer server_utils.ResetTestState()
 
-	test_utils.InitClient(t, map[param.Param]any{
+	test_utils.InitClientForTest(t, map[param.Param]any{
 		param.Client_DirectorRetries: 1,
 		param.Logging_Level:          "warning", // not debug, so header is not set by default
 	})
@@ -449,7 +449,7 @@ func TestQueryDirectorDebugHeaderPercentage(t *testing.T) {
 	// which sets logrus's global level to TraceLevel so that filter hooks see every
 	// message. Before the fix, log.IsLevelEnabled(log.DebugLevel) would return true
 	// here even though the configured level is "warning".
-	test_utils.InitClient(t, map[param.Param]any{
+	test_utils.InitClientForTest(t, map[param.Param]any{
 		param.Client_DirectorRetries: 1,
 		param.Logging_Level:          "warning",
 	})
@@ -503,7 +503,7 @@ func TestDirectorTimeout(t *testing.T) {
 	server_utils.ResetTestState()
 	defer server_utils.ResetTestState()
 
-	test_utils.InitClient(t, map[param.Param]any{
+	test_utils.InitClientForTest(t, map[param.Param]any{
 		param.Client_DirectorRetries: 1, // Only try once to avoid long waits
 		param.Debug:                  true,
 	})

@@ -961,7 +961,7 @@ func TestEmitCfg(t *testing.T) {
 
 	defer server_utils.ResetTestState()
 
-	test_utils.InitClient(t, nil)
+	test_utils.InitClientForTest(t, nil)
 	require.NoError(t, param.Origin_RunLocation.Set(dirname))
 
 	configTester := func(cfg *ScitokensCfg, configResult string) func(t *testing.T) {
@@ -1042,7 +1042,7 @@ func TestLoadScitokensConfig(t *testing.T) {
 
 	defer server_utils.ResetTestState()
 
-	test_utils.InitClient(t, nil)
+	test_utils.InitClientForTest(t, nil)
 
 	require.NoError(t, param.Origin_RunLocation.Set(dirname))
 
@@ -1077,8 +1077,6 @@ func TestMergeConfig(t *testing.T) {
 	server_utils.ResetTestState()
 	defer server_utils.ResetTestState()
 
-	test_utils.MockFederationRoot(t, nil, nil)
-
 	storageDir := filepath.Join(dirname, "storage")
 	require.NoError(t, os.MkdirAll(storageDir, 0777))
 	require.NoError(t, os.Chmod(storageDir, 0777))
@@ -1103,6 +1101,7 @@ func TestMergeConfig(t *testing.T) {
 			err := os.WriteFile(scitokensConfigFile, []byte(configInput), fs.FileMode(0600))
 			require.NoError(t, err)
 			test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+			test_utils.MockFederationRoot(t, nil, nil)
 
 			err = EmitScitokensConfig(&origin.OriginServer{})
 			require.NoError(t, err)
@@ -1300,8 +1299,6 @@ func TestGenerateOriginIssuer(t *testing.T) {
 			require.NoError(t, param.ConfigDir.Set(cfgDir))
 			require.NoError(t, param.Logging_Level.Set("debug"))
 
-			test_utils.MockFederationRoot(t, nil, nil)
-
 			// Load in test config
 			viper.SetConfigType("yaml")
 			err := viper.MergeConfig(strings.NewReader(tc.yamlConfig))
@@ -1321,6 +1318,7 @@ func TestGenerateOriginIssuer(t *testing.T) {
 				require.NoError(t, param.SetRaw(param.Origin_Exports.GetName(), exports))
 			}
 			test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+			test_utils.MockFederationRoot(t, nil, nil)
 
 			// Set extra params if provided
 			for p, val := range tc.extraParams {
@@ -1598,8 +1596,8 @@ func TestGenerateFederationIssuer(t *testing.T) {
 			require.NoError(t, param.Origin_FederationPrefix.Set("/foo/bar"))
 			require.NoError(t, param.TLSSkipVerify.Set(true))
 
-			test_utils.MockFederationRoot(t, nil, nil)
 			test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+			test_utils.MockFederationRoot(t, nil, nil)
 
 			issuer, err := GenerateFederationIssuer()
 			require.NoError(t, err)
@@ -1634,8 +1632,8 @@ func TestWriteOriginScitokensConfig(t *testing.T) {
 	require.NoError(t, param.Server_Hostname.Set("origin.example.com"))
 	require.NoError(t, param.Origin_StorageType.Set(string(server_structs.OriginStoragePosix)))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	// Since this test asserts the static config from resources/test-scitokens-monitoring.cfg
 	// matches the generated/written config, we need to force WriteOriginScitokensConfig to find a

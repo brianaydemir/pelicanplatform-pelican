@@ -108,8 +108,8 @@ func TestCollectionsAPI(t *testing.T) {
 
 	require.NoError(t, param.Server_UIAdminUsers.Set([]string{"admin-user"}))
 
-	test_utils.MockFederationRoot(t, nil, nil)
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
+	test_utils.MockFederationRoot(t, nil, nil)
 
 	router = gin.Default()
 

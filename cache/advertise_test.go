@@ -130,7 +130,7 @@ func TestFilterNsAdsForCache(t *testing.T) {
 
 	for _, testInput := range tests {
 		t.Run(testInput.desc, func(t *testing.T) {
-			test_utils.InitClient(t, nil)
+			test_utils.InitClientForTest(t, nil)
 			// We don't bother passing info to the federation mock server
 			// because we only need it to be queryable (not to be correct)
 			test_utils.MockFederationRoot(t, nil, nil)
