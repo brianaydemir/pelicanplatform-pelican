@@ -102,16 +102,14 @@ func WriteBigBuffer(t *testing.T, fp io.WriteCloser, sizeMB int) (size int) {
 	return
 }
 
-// GenerateJWK generates a JWK private key and a corresponding JWKS public key,
-// and the string representation of the public key
+// GenerateJWK generates an RSA JWK private key, its corresponding public JWKS,
+// and the JSON-encoded public JWKS string.
 func GenerateJWK() (jwk.Key, jwk.Set, string, error) {
-	// Generate an RSA private key
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, nil, "", err
 	}
 
-	// Create a JWK from the private key
 	jwkKey, err := jwk.FromRaw(privateKey)
 	if err != nil {
 		return nil, nil, "", err
@@ -120,13 +118,11 @@ func GenerateJWK() (jwk.Key, jwk.Set, string, error) {
 	_ = jwkKey.Set(jwk.AlgorithmKey, "RS256")
 	_ = jwkKey.Set(jwk.KeyUsageKey, "sig")
 
-	// Extract the public key
 	publicKey, err := jwk.PublicKeyOf(jwkKey)
 	if err != nil {
 		return nil, nil, "", err
 	}
 
-	// Create a JWKS from the public key
 	jwks := jwk.NewSet()
 	if err := jwks.AddKey(publicKey); err != nil {
 		return nil, nil, "", err
@@ -141,25 +137,21 @@ func GenerateJWK() (jwk.Key, jwk.Set, string, error) {
 }
 
 func GenerateJWKS() (string, error) {
-	// Create a private key to use for the test
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return "", errors.Wrap(err, "Error generating private key")
 	}
 
-	// Convert from raw ecdsa to jwk.Key
 	pKey, err := jwk.FromRaw(privateKey)
 	if err != nil {
 		return "", errors.Wrap(err, "Unable to convert ecdsa.PrivateKey to jwk.Key")
 	}
 
-	//Assign Key id to the private key
 	err = jwk.AssignKeyID(pKey)
 	if err != nil {
 		return "", errors.Wrap(err, "Error assigning kid to private key")
 	}
 
-	//Set an algorithm for the key
 	err = pKey.Set(jwk.AlgorithmKey, jwa.ES256)
 	if err != nil {
 		return "", errors.Wrap(err, "Unable to set algorithm for pKey")
@@ -180,15 +172,14 @@ func GenerateJWKS() (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "Unable to marshal the json into string")
 	}
-	// Append a new line to the JSON data
 	jsonData = append(jsonData, '\n')
 
 	return string(jsonData), nil
 }
 
-// For these tests, we only need to lookup key locations. Create a dummy registry that only returns
-// the jwks_uri location for the given key. Once a server is instantiated, it will only return
-// locations for the provided prefix. To change prefixes, create a new registry mockup.
+// RegistryMockup returns an HTTP test server that responds to registry
+// lookups for prefix with a fixed jwks_uri. Each server is bound to one
+// prefix; create a new one to switch prefixes.
 func RegistryMockup(t *testing.T, prefix string) *httptest.Server {
 	registryUrl, _ := url.Parse("https://registry.com:8446")
 	path, err := url.JoinPath("/api/v1.0/registry", prefix, ".well-known/issuer.jwks")
@@ -207,24 +198,36 @@ func RegistryMockup(t *testing.T, prefix string) *httptest.Server {
 	return server
 }
 
-// Initialize the client for a unit test
+// ClearFederationURLsForTest sets all five federation URL parameters
+// to "" at viper's override priority, suppressing any values loaded from
+// other config sources.
 //
-// Will set the configuration to a temporary directory (to
-// avoid pulling in global configuration) and set some arbitrary
-// param configurations. The initCfg map uses typed param constants
-// as keys; each value is set via the param's typed Set method where
-// possible (StringParam, BoolParam, etc.), falling back to param.Set
-// for OpaqueParam or unknown types. Panics from type mismatches are
-// caught and reported as test failures.
-func InitClient(t *testing.T, initCfg map[param.Param]any) {
-	config.ResetConfig()
-	t.Cleanup(config.ResetConfig)
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
+// InitClientForTest and InitServerForTest call this automatically.
+//
+// Call this directly only in tests that cannot import test_utils
+// (e.g., tests in the config package, which would create an import cycle).
+func ClearFederationURLsForTest(t testing.TB) {
+	t.Helper()
+	require.NoError(t, param.Federation_DiscoveryUrl.Set(""))
+	// Federation_Director/Registry/Jwk/BrokerUrl are opaque params
+	// with no typed setter; they must be set via param.Set.
+	require.NoError(t, param.Set(param.Federation_DirectorUrl, ""))
+	require.NoError(t, param.Set(param.Federation_RegistryUrl, ""))
+	require.NoError(t, param.Set(param.Federation_JwkUrl, ""))
+	require.NoError(t, param.Set(param.Federation_BrokerUrl, ""))
+}
+
+// applyInitCfg sets the parameters from initCfg using
+// each param's typed setter where possible (StringParam, BoolParam, etc.),
+// falling back to param.Set for opaque or unknown types.
+// Panics from type mismatches are caught and reported as test failures.
+func applyInitCfg(t *testing.T, caller string, initCfg map[param.Param]any) {
+	t.Helper()
 	for p, val := range initCfg {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					t.Fatalf("InitClient: panic setting param %q to %v (%T): %v", p.GetName(), val, val, r)
+					t.Fatalf("%s: panic setting param %q to %v (%T): %v", caller, p.GetName(), val, val, r)
 				}
 			}()
 			var err error
@@ -244,35 +247,81 @@ func InitClient(t *testing.T, initCfg map[param.Param]any) {
 				case time.Duration:
 					err = tp.SetString(v.String())
 				default:
-					t.Fatalf("InitClient: unsupported value type %T for DurationParam %q", val, p.GetName())
+					t.Fatalf("%s: unsupported value type %T for DurationParam %q", caller, val, p.GetName())
 				}
 			default:
 				err = param.Set(p, val)
 			}
-			require.NoError(t, err, "InitClient: failed to set param %q", p.GetName())
+			require.NoError(t, err, "%s: failed to set param %q", caller, p.GetName())
 		}()
 	}
-
-	require.NoError(t, config.InitClient())
 }
 
-// getUniqueAvailablePorts returns `count` unique, available ports.
-// **WARNING**: There is a small race condition between getting the list of available ports and
-// actually binding to them in whatever service uses these values. Be warned they may (but are
-// hopefully unlikely to) disappear before you can use them!
+// InitClientForTest initializes the Pelican client for a unit test.
+//
+// It resets all configuration to a clean state, sets ConfigDir to
+// a temporary directory, writes an empty pelican.yaml there
+// to shadow any system-wide config file, clears federation URL overrides,
+// and calls config.InitClient.
+//
+// The initCfg map uses typed param constants as keys; values are set
+// through the param's typed Set method where possible.
+func InitClientForTest(t *testing.T, initCfg map[param.Param]any) {
+	t.Helper()
+	config.ResetConfig()
+	t.Cleanup(config.ResetConfig)
+	cfgDir := t.TempDir()
+	require.NoError(t, param.ConfigDir.Set(cfgDir))
+
+	// Pelican configures itself using the first `pelican.yaml` file
+	// it finds, and ConfigDir is the first place it looks.
+	// By writing an empty pelican.yaml into ConfigDir, Pelican will
+	// never fall through to /etc/pelican/pelican.yaml.
+	require.NoError(t, os.WriteFile(filepath.Join(cfgDir, "pelican.yaml"), []byte{}, 0600))
+
+	// However, the empty file is not sufficient on its own.
+	//
+	// InitConfigInternal (called by InitClient) first calls
+	// SetBaseDefaultsInConfig, which merges osdf.yaml when the OSDF
+	// prefix is active.
+	//
+	// That merge injects Federation.DiscoveryUrl = https://osg-htc.org
+	// at config-file priority,
+	// before our empty pelican.yaml is even read.
+	//
+	// Without clearing the federation URLs, any subsequent call
+	// to GetFederation() would attempt a live HTTP discovery call to
+	// osg-htc.org.
+	ClearFederationURLsForTest(t)
+
+	// Apply caller params before InitClient so that they are in place
+	// when InitClient first reads them (e.g., Client_IsPlugin affects
+	// SetClientDefaults; TLSSkipVerify affects setupTransport).
+	applyInitCfg(t, "InitClientForTest", initCfg)
+	require.NoError(t, config.InitClient())
+
+	// Re-apply caller params after InitClient because SetClientDefaults
+	// calls viper.Set() — override priority — on certain params
+	// (e.g., Client_DirectorRetries when Client_IsPlugin is true
+	// or the value is below the minimum).
+	// This ensures that caller-supplied values survive.
+	applyInitCfg(t, "InitClientForTest", initCfg)
+}
+
+// GetUniqueAvailablePorts returns count unique, available localhost ports.
+// Warning: there is a brief window between identifying a port and the caller
+// binding to it; another process may claim a port in that interval.
 func GetUniqueAvailablePorts(count int) ([]int, error) {
-	ports := make(map[int]struct{}, count) // A set for tracking unique ports
+	ports := make(map[int]struct{}, count)
 	listeners := make([]net.Listener, 0, count)
-	// Ensure all listeners are closed at the end
 	defer func() {
 		for _, l := range listeners {
 			l.Close()
 		}
 	}()
 
-	// Gather unique ports
 	for len(ports) < count {
-		ln, err := net.Listen("tcp", "127.0.0.1:0") // Epehemeral, random, and available port handed over by the OS
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			return nil, err
 		}
@@ -280,18 +329,15 @@ func GetUniqueAvailablePorts(count int) ([]int, error) {
 		addr := ln.Addr().(*net.TCPAddr)
 		port := addr.Port
 
-		// Ensure uniqueness before adding to the list
 		if _, exists := ports[port]; exists {
 			ln.Close()
 			continue
 		}
 
-		// Store the unique port and keep its listener open
 		ports[port] = struct{}{}
 		listeners = append(listeners, ln)
 	}
 
-	// Convert map keys to a sorted slice
 	portList := make([]int, 0, count)
 	for port := range ports {
 		portList = append(portList, port)
@@ -300,14 +346,30 @@ func GetUniqueAvailablePorts(count int) ([]int, error) {
 	return portList, nil
 }
 
-// Create a mock federation root that can respond to requests for metadata and federation keys
+// MockFederationRoot starts a TLS test server that answers
+// federation-discovery requests and wires Viper to treat it as
+// the federation discovery URL.
+//
+// fInfo overrides individual fields of the default discovery response;
+// nil uses built-in fake URLs for director, registry, and broker.
+// kSet overrides the issuer key set; nil derives keys from IssuerKeysDirectory.
+//
+// Must be called after InitServerForTest: InitServer eagerly consumes the
+// federation-discovery sync.Once, and MockFederationRoot resets it afterward.
 func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kSet *jwk.Set) {
-	// Set up the keys to use in our response jwks
+	// Clear any federation URL params already set in Viper
+	// so that discoverFederationImpl does not short-circuit
+	// and skip querying the mock.
+	ClearFederationURLsForTest(t)
+
 	var pKeySetInternal jwk.Set
 	var err error
 	if kSet == nil {
-		keysDir := filepath.Join(t.TempDir(), "testKeyDir")
-		require.NoError(t, param.IssuerKeysDirectory.Set(keysDir))
+		keysDir := param.IssuerKeysDirectory.GetString()
+		if keysDir == "" {
+			keysDir = filepath.Join(t.TempDir(), "testKeyDir")
+			require.NoError(t, param.IssuerKeysDirectory.Set(keysDir))
+		}
 		pKeySetInternal, err = config.GetIssuerPublicJWKS()
 		require.NoError(t, err, "Failed to load public JWKS while creating mock federation root")
 	} else {
@@ -316,10 +378,10 @@ func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kS
 	kSetBytes, err := json.Marshal(pKeySetInternal)
 	require.NoError(t, err, "Failed to marshal public JWKS while creating mock federation root")
 
-	// Mock the JSON responses. Values get populated at query time using the getInternalFInfo function
+	// Response values are resolved lazily (via getInternalFInfo)
+	// so the server URL can be embedded in the discovery document.
 	var getInternalFInfo func() pelican_url.FederationDiscovery
 	responseHandler := func(w http.ResponseWriter, r *http.Request) {
-		// We only understand GET requests
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			_, err := w.Write([]byte("I only understand GET requests, but you sent me " + r.Method))
@@ -329,7 +391,6 @@ func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kS
 
 		path := r.URL.Path
 		switch path {
-		// Provide base fed root metadata
 		case "/.well-known/pelican-configuration":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -347,7 +408,6 @@ func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kS
 			require.NoError(t, err, "Failed to marshal discovery metadata")
 			_, err = w.Write(discoveryJSONBytes)
 			require.NoError(t, err)
-		// If someone follows the jwks_uri value, return the keys
 		case "/.well-known/issuer.jwks":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -363,7 +423,6 @@ func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kS
 	server := httptest.NewTLSServer(http.HandlerFunc(responseHandler))
 	serverUrl := server.URL
 	getInternalFInfo = func() pelican_url.FederationDiscovery {
-		// Pre-populate some fed metadata values
 		internalFInfo := pelican_url.FederationDiscovery{
 			DiscoveryEndpoint: serverUrl,
 			DirectorEndpoint:  "https://fake-director.com",
@@ -372,7 +431,6 @@ func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kS
 			JwksUri:           fmt.Sprintf("%s/.well-known/issuer.jwks", serverUrl),
 		}
 
-		// Override as needed based on the passed in fInfo
 		if fInfo != nil {
 			if fInfo.DirectorEndpoint != "" {
 				internalFInfo.DirectorEndpoint = fInfo.DirectorEndpoint
@@ -393,20 +451,30 @@ func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kS
 		return internalFInfo
 	}
 
-	// Cleanup, cleanup, everybody do your share!
 	t.Cleanup(server.Close)
 
-	// Finally, set this as the federation discovery URL so tests
-	// can "discover" the info
 	require.NoError(t, param.Federation_DiscoveryUrl.Set(serverUrl))
-	// Set to skip TLS verification for the test server
 	require.NoError(t, param.TLSSkipVerify.Set(true))
+
+	// Reset the transport so that the next GetTransport/GetClient call
+	// re-runs setupTransport with TLSSkipVerify=true.
+	// Without this, if a prior call had consumed the sync.Once
+	// with TLSSkipVerify=false, the mock TLS server's self-signed cert
+	// would now be unverifiable.
+	config.ResetTransport()
+
+	// Reset the cached discovery result so the next GetFederation call
+	// queries this mock server rather than returning a cached result from
+	// InitServerForTest's eager GetFederation call.
+	config.ResetFederationForTest()
 }
 
-// Create a mock issuer that responds to request for /.well-known/openid-configuration
-// and /.well-known/issuer.jwks
+// MockIssuer starts an HTTP test server that answers OIDC discovery requests
+// and returns the server URL for use as an issuer URL in tests.
+//
+// kSet overrides the issuer key set;
+// nil generates a fresh key set in IssuerKeysDirectory.
 func MockIssuer(t *testing.T, kSet *jwk.Set) string {
-	// Set up the keys to use in our response jwks
 	var pKeySetInternal jwk.Set
 	var err error
 	if kSet == nil {
@@ -422,7 +490,6 @@ func MockIssuer(t *testing.T, kSet *jwk.Set) string {
 
 	var getMyUrl func() string
 	responseHandler := func(w http.ResponseWriter, r *http.Request) {
-		// We only understand GET requests
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			_, err := w.Write([]byte("I only understand GET requests, but you sent me " + r.Method))
@@ -473,8 +540,9 @@ var (
 	globalHookEnabled atomic.Bool
 )
 
-// globalBufferHook captures log entries into a shared buffer before tests are running
-// so they can be replayed under the first test's logger instead of hitting stdout/stderr.
+// globalBufferHook captures log entries emitted before any test runs —
+// e.g., during package-level init — into a shared buffer so that they can
+// be replayed under the first test's logger.
 type globalBufferHook struct {
 	buf *bytes.Buffer
 	mu  *sync.Mutex
@@ -494,25 +562,25 @@ func (h *globalBufferHook) Fire(entry *logrus.Entry) error {
 	return nil
 }
 
-// NewTestLogHook creates a new TestLogHook that writes to testing.TB's log buffer
+// NewTestLogHook creates a TestLogHook that routes log entries into t's log buffer.
 func NewTestLogHook(t testing.TB) *TestLogHook {
 	return &TestLogHook{t: t}
 }
 
-// Fire is called on every log entry
 func (hook *TestLogHook) Fire(entry *logrus.Entry) error {
 	hook.t.Helper()
 	hook.t.Log(formatEntry(entry))
 	return nil
 }
 
-// Levels defines which log levels this hook applies to
 func (hook *TestLogHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
-// SetupGlobalTestLogging silences logrus output for an entire package's tests (for use in TestMain).
-// It preserves existing logger settings and restores them when the returned cleanup is called.
+// SetupGlobalTestLogging redirects logrus output away from stdout/stderr
+// for the duration of a test binary run.
+// Intended for use in TestMain;
+// the returned function restores the original configuration.
 func SetupGlobalTestLogging() func() {
 	originalOut := logrus.StandardLogger().Out
 	originalHooks := logrus.StandardLogger().Hooks
@@ -537,18 +605,17 @@ func SetupGlobalTestLogging() func() {
 	}
 }
 
-// SetupTestLogging configures logrus to write to the test's log buffer.
-// This should be called at the beginning of tests to ensure clean output.
-// Returns a cleanup function that should be called with defer.
+// SetupTestLogging redirects logrus output into t's log buffer
+// for duration of the test.
+// Use as: t.Cleanup(test_utils.SetupTestLogging(t)).
 func SetupTestLogging(t testing.TB) func() {
 	previousGlobalHookState := globalHookEnabled.Swap(false)
-	// Save the original logger configuration
 	originalOut := logrus.StandardLogger().Out
 	originalHooks := logrus.StandardLogger().Hooks
 	originalFormatter := logrus.StandardLogger().Formatter
 	originalReportCaller := logrus.StandardLogger().ReportCaller
 
-	// Flush any buffered global logs into the test hook (only emitted on failure)
+	// Flush any buffered pre-test logs into the hook (visible on failure).
 	var bufferedLogs string
 	globalLogMu.Lock()
 	if globalLogBuffer.Len() > 0 {
@@ -557,10 +624,10 @@ func SetupTestLogging(t testing.TB) func() {
 	}
 	globalLogMu.Unlock()
 
-	// Reset global logging hooks that may have been added by config initialization
+	// Reset hooks that config initialization might have added.
 	config.ResetGlobalLoggingHooks()
 
-	// Disable standard output and use only the test hook
+	// Disable standard output and use only the test hook.
 	logrus.SetOutput(io.Discard)
 	logrus.StandardLogger().ReplaceHooks(make(logrus.LevelHooks))
 	logrus.SetReportCaller(true)
@@ -576,10 +643,9 @@ func SetupTestLogging(t testing.TB) func() {
 		}
 	}
 
-	// Return cleanup function
 	return func() {
 		logging.ResetGlobalManager()
-		// Reset global logging hooks so they don't output during subsequent config initialization
+		// Reset hooks so they don't fire during subsequent config initialization.
 		config.ResetGlobalLoggingHooks()
 		logrus.SetOutput(originalOut)
 		logrus.StandardLogger().ReplaceHooks(originalHooks)
@@ -619,7 +685,7 @@ func formatEntry(entry *logrus.Entry) string {
 // InitServerTLSForTest redirects all TLS key and certificate parameters
 // to paths inside dir, isolating tests from host configuration.
 // Call after ResetTestState and before InitServer;
-// the caller is responsible for certificate generation.
+// InitServer generates any missing certs and keys on the fly.
 func InitServerTLSForTest(t testing.TB, dir string) {
 	t.Helper()
 	require.NoError(t, param.Server_TLSKey.Set(filepath.Join(dir, "tls.key")))
@@ -628,23 +694,60 @@ func InitServerTLSForTest(t testing.TB, dir string) {
 	require.NoError(t, param.Server_TLSCAKey.Set(filepath.Join(dir, "ca.key")))
 }
 
-// InitServerForTest redirects TLS parameters to param.ConfigDir,
-// then calls config.InitServer.
-// param.ConfigDir must already be set to a test-owned directory.
-// Call after ResetTestState.
+// InitServerForTest prepares a test-owned server configuration
+// and calls config.InitServer.
+// It requires param.ConfigDir to already point to a test-owned directory,
+// and must be called after ResetTestState.
+//
+// It writes an empty pelican.yaml into ConfigDir to shadow
+// /etc/pelican/pelican.yaml, and clears all federation URL overrides.
+//
+// config.InitServer calls GetFederation eagerly; ErrNoDiscoveryEndpoint
+// (returned when no federation URL is configured) is treated as a clean
+// "no federation" state. Call MockFederationRoot afterward to add one.
 func InitServerForTest(t testing.TB, ctx context.Context, serverType server_structs.ServerType) {
 	t.Helper()
-	// param.ConfigDir.GetString() always returns "" — ConfigDir is a special
-	// internal key not in parameters.yaml and therefore absent from stringAccessors.
-	InitServerTLSForTest(t, viper.GetString("ConfigDir"))
-	require.NoError(t, config.InitServer(ctx, serverType))
+
+	// param.ConfigDir.GetString() always returns "" —
+	// ConfigDir is a special internal key absent from parameters.yaml
+	// and therefore absent from the typed string accessors.
+	cfgDir := viper.GetString("ConfigDir")
+	require.NoError(t, os.MkdirAll(cfgDir, 0700))
+
+	// Pelican configures itself using the first `pelican.yaml` file
+	// it finds, and ConfigDir is the first place it looks.
+	// By writing an empty pelican.yaml into ConfigDir, Pelican will
+	// never fall through to /etc/pelican/pelican.yaml.
+	require.NoError(t, os.WriteFile(filepath.Join(cfgDir, "pelican.yaml"), []byte{}, 0600))
+
+	// However, the empty file is not sufficient on its own.
+	//
+	// InitConfigInternal (called by InitServer) first calls
+	// SetBaseDefaultsInConfig, which merges osdf.yaml when the OSDF
+	// prefix is active.
+	//
+	// That merge injects Federation.DiscoveryUrl = https://osg-htc.org
+	// at config-file priority,
+	// before our empty pelican.yaml is even read.
+	//
+	// Without clearing the federation URLs, any subsequent call
+	// to GetFederation() would attempt a live HTTP discovery call to
+	// osg-htc.org.
+	ClearFederationURLsForTest(t)
+
+	InitServerTLSForTest(t, cfgDir)
+	err := config.InitServer(ctx, serverType)
+	if errors.Is(err, config.ErrNoDiscoveryEndpoint) {
+		config.SetFederation(pelican_url.FederationDiscovery{})
+		return
+	}
+	require.NoError(t, err)
 }
 
-// Helper function for other tests who call server_utils.GetOriginExports() internally.
-// This function gets a temp dir for export StoragePrefixes, whose existence is validated
-// by server_utils.GetOriginExports(). The directory is created with 0777 permissions so
-// the XRootD daemon user (which is "others" relative to the test process owner) has the
-// read, write, and execute permissions needed for all origin capabilities.
+// GetTmpStoragePrefixDir returns a 0777 temporary directory suitable
+// for use as an origin export StoragePrefix.
+// The XRootD daemon process runs as a different user,
+// so it requires world-readable, -writable, and -executable permissions.
 func GetTmpStoragePrefixDir(t *testing.T) string {
 	tmpDir := t.TempDir() + "/tmpdir"
 

@@ -206,3 +206,10 @@ func setupTransport() {
 	transportNoProxy.Proxy = nil
 	clientNoProxy = &http.Client{Transport: transportNoProxy}
 }
+
+// ResetTransport clears the transport sync.Once so that the next call
+// to GetTransport, GetClient, etc. re-runs setupTransport with the current
+// configuration.
+func ResetTransport() {
+	onceTransport = sync.Once{}
+}
