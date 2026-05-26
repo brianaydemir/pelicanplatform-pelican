@@ -29,7 +29,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"io/fs"
@@ -140,7 +139,7 @@ func TestNewTransferDetailsEnv(t *testing.T) {
 	testCache := "http://cache.edu:8000"
 
 	os.Setenv("OSG_DISABLE_PROXY_FALLBACK", "")
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 
 	transfers := generateTransferDetails(testCache, transferDetailsOptions{})
 	assert.Equal(t, 1, len(transfers))
@@ -164,7 +163,7 @@ func TestIsProxyEnabled(t *testing.T) {
 	for _, envVar := range proxyVars {
 		t.Run("ProxyEnabledVia_"+envVar, func(t *testing.T) {
 			t.Setenv(envVar, "http://proxy.edu:3128")
-			test_utils.InitClientForTest(t, map[param.Param]any{})
+			test_utils.InitClientForTest(t, nil)
 			assert.True(t, isProxyEnabled(), "proxy should be enabled when %s is set", envVar)
 		})
 	}
@@ -173,7 +172,7 @@ func TestIsProxyEnabled(t *testing.T) {
 		for _, envVar := range proxyVars {
 			t.Setenv(envVar, "")
 		}
-		test_utils.InitClientForTest(t, map[param.Param]any{})
+		test_utils.InitClientForTest(t, nil)
 		assert.False(t, isProxyEnabled(), "proxy should be disabled when no proxy env vars are set")
 	})
 
@@ -705,7 +704,7 @@ func TestFailedUpload(t *testing.T) {
 
 func TestUploadLocalFileNotFound(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return 404 for PROPFIND (stat) requests so upload doesn't think file exists
@@ -998,7 +997,7 @@ func TestTimeoutHeaderSetForDownload(t *testing.T) {
 
 func TestJobIdHeaderSetForDownload(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 
 	// Create a test .job.ad file
 	jobAdFile, err := os.CreateTemp("", ".job.ad")
@@ -1418,7 +1417,6 @@ func TestStatusCodeErrorWrappingUpload(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
 	test_utils.InitClientForTest(t, map[param.Param]any{
 		param.Logging_Level: "debug",
-		param.TLSSkipVerify: true,
 	})
 
 	testCases := []struct {
@@ -1508,7 +1506,7 @@ func TestStatusCodeErrorWrappingUpload(t *testing.T) {
 			err := os.WriteFile(testfileLocation, []byte("test content"), fs.FileMode(0600))
 			require.NoError(t, err)
 
-			svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Return 404 for PROPFIND (stat) requests so upload doesn't think file exists
 				if r.Method == "PROPFIND" {
 					w.WriteHeader(http.StatusNotFound)
@@ -2101,10 +2099,9 @@ func TestChecksumPut(t *testing.T) {
 	t.Run("test-good-checksum", func(t *testing.T) {
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Logging_Level: "debug",
-			param.TLSSkipVerify: true,
 		})
 
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PUT" {
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
@@ -2172,10 +2169,9 @@ func TestChecksumPut(t *testing.T) {
 	t.Run("test-bad-checksum", func(t *testing.T) {
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Logging_Level: "debug",
-			param.TLSSkipVerify: true,
 		})
 
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PUT" {
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
@@ -2256,10 +2252,9 @@ func TestChecksumPut(t *testing.T) {
 	t.Run("test-algorithm-mismatch", func(t *testing.T) {
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Logging_Level: "debug",
-			param.TLSSkipVerify: true,
 		})
 
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PUT" {
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
@@ -2331,10 +2326,9 @@ func TestChecksumPut(t *testing.T) {
 	t.Run("test-no-error-when-requireChecksum-false", func(t *testing.T) {
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Logging_Level: "debug",
-			param.TLSSkipVerify: true,
 		})
 
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PUT" {
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
@@ -2405,10 +2399,9 @@ func TestChecksumPut(t *testing.T) {
 	t.Run("test-missing-checksum-when-required", func(t *testing.T) {
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Logging_Level: "debug",
-			param.TLSSkipVerify: true,
 		})
 
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PUT" {
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
@@ -2672,7 +2665,6 @@ func TestFailedUploadError(t *testing.T) {
 	configDir := t.TempDir()
 	test_utils.InitClientForTest(t, map[param.Param]any{
 		param.Transport_ResponseHeaderTimeout: "500ms",
-		param.TLSSkipVerify:                   true,
 		param.Logging_Level:                   "debug",
 	})
 
@@ -2681,7 +2673,7 @@ func TestFailedUploadError(t *testing.T) {
 	require.NoError(t, err)
 
 	shutdownChan := make(chan bool)
-	svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "PROPFIND" {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -2744,7 +2736,6 @@ func TestFailedLargeUploadError(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
 	test_utils.InitClientForTest(t, map[param.Param]any{
 		param.Transport_ResponseHeaderTimeout: "500ms",
-		param.TLSSkipVerify:                   true,
 		param.Logging_Level:                   "debug",
 		param.Client_StoppedTransferTimeout:   "1s",
 	})
@@ -2755,7 +2746,7 @@ func TestFailedLargeUploadError(t *testing.T) {
 	test_utils.WriteBigBuffer(t, fp, 40)
 
 	shutdownChan := make(chan bool)
-	svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "PROPFIND" {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -3079,13 +3070,11 @@ func TestTLSCertificateError(t *testing.T) {
 
 func TestPutOverwrite(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{
-		param.TLSSkipVerify: true,
-	})
+	test_utils.InitClientForTest(t, nil)
 
 	t.Run("ObjectExists", func(t *testing.T) {
 		// Create a server that responds to WebDAV PROPFIND requests indicating the object exists
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PROPFIND" {
 				// Simulate existing object - return WebDAV response
 				w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -3162,7 +3151,7 @@ func TestPutOverwrite(t *testing.T) {
 
 	t.Run("ObjectDoesNotExist", func(t *testing.T) {
 		// Create a server that responds to WebDAV PROPFIND requests with 404 (object doesn't exist)
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PROPFIND" {
 				// Simulate non-existing object - return 404
 				w.WriteHeader(http.StatusNotFound)
@@ -3223,7 +3212,7 @@ func TestPutOverwrite(t *testing.T) {
 
 	t.Run("StatError", func(t *testing.T) {
 		// Create a server that returns an error on WebDAV PROPFIND requests
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PROPFIND" {
 				// Simulate server error
 				w.WriteHeader(http.StatusInternalServerError)
@@ -3299,7 +3288,11 @@ func TestPutOverwrite(t *testing.T) {
 	t.Run("OverwriteEnabled", func(t *testing.T) {
 		// Create a server that responds to WebDAV PROPFIND requests indicating the object exists
 		// But the upload should still proceed because overwrites are enabled
-		svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		test_utils.InitClientForTest(t, map[param.Param]any{
+			param.Client_EnableOverwrites: true,
+		})
+
+		svr := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "PROPFIND" {
 				// Simulate existing object - return WebDAV response
 				w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -3329,17 +3322,6 @@ func TestPutOverwrite(t *testing.T) {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}))
 		defer svr.Close()
-
-		// Trust the test server certificate instead of skipping verification
-		certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: svr.Certificate().Raw})
-		certFile := filepath.Join(t.TempDir(), "ca.pem")
-		require.NoError(t, os.WriteFile(certFile, certPEM, 0o644))
-
-		// Test that overwrite protection is skipped when Client.EnableOverwrites is enabled
-		test_utils.InitClientForTest(t, map[param.Param]any{
-			param.Server_TLSCACertificateFile: certFile,
-			param.Client_EnableOverwrites:     true,
-		})
 
 		svrURL, err := url.Parse(svr.URL)
 		require.NoError(t, err)
@@ -3945,7 +3927,7 @@ func TestIsRetryableWebDavError(t *testing.T) {
 // TestDirectoryPermissionsRespectUmask tests that directories created during
 // downloads respect different umask values
 func TestDirectoryPermissionsRespectUmask(t *testing.T) {
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 
 	// Save original umask
 	oldUmask := syscall.Umask(0)
@@ -4051,9 +4033,7 @@ func TestDirectoryPermissionsRespectUmask(t *testing.T) {
 // TestUpload403WithSyncEnabled verifies that when sync is enabled, a 403 response
 // during upload is treated as "file already exists" and doesn't cause an error
 func TestUpload403WithSyncEnabled(t *testing.T) {
-	test_utils.InitClientForTest(t, map[param.Param]any{
-		param.TLSSkipVerify: true,
-	})
+	test_utils.InitClientForTest(t, nil)
 
 	// Create a temporary file to upload
 	tempFile, err := os.CreateTemp("", "test-upload-*.txt")
@@ -4063,7 +4043,7 @@ func TestUpload403WithSyncEnabled(t *testing.T) {
 	require.NoError(t, err)
 	tempFile.Close()
 
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return 404 for PROPFIND (stat) requests
 		if r.Method == "PROPFIND" {
 			w.WriteHeader(http.StatusNotFound)
@@ -4124,9 +4104,7 @@ func TestUpload403WithSyncEnabled(t *testing.T) {
 // TestUpload403WithSyncDisabled verifies that when sync is disabled, a 403 response
 // during upload is still treated as an error
 func TestUpload403WithSyncDisabled(t *testing.T) {
-	test_utils.InitClientForTest(t, map[param.Param]any{
-		param.TLSSkipVerify: true,
-	})
+	test_utils.InitClientForTest(t, nil)
 
 	// Create a temporary file to upload
 	tempFile, err := os.CreateTemp("", "test-upload-*.txt")
@@ -4136,7 +4114,7 @@ func TestUpload403WithSyncDisabled(t *testing.T) {
 	require.NoError(t, err)
 	tempFile.Close()
 
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return 403 Forbidden for PUT
 		if r.Method == "PUT" {
 			w.WriteHeader(http.StatusForbidden)
@@ -4209,9 +4187,7 @@ func TestUpload403WithSyncDisabled(t *testing.T) {
 // TestRecursiveUpload403WithSync verifies that recursive directory uploads properly handle 403 errors
 // This tests the walkDirUpload -> uploadObject flow
 func TestRecursiveUpload403WithSync(t *testing.T) {
-	test_utils.InitClientForTest(t, map[param.Param]any{
-		param.TLSSkipVerify: true,
-	})
+	test_utils.InitClientForTest(t, nil)
 
 	// Create a temporary directory with multiple files
 	tempDir := t.TempDir()
@@ -4232,7 +4208,7 @@ func TestRecursiveUpload403WithSync(t *testing.T) {
 	uploadedFiles := make(map[string]bool)
 	var mu sync.Mutex
 
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := test_utils.NewTLSServerForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return 404 for PROPFIND (stat) requests - simulate listing disabled
 		if r.Method == "PROPFIND" {
 			w.WriteHeader(http.StatusNotFound)
@@ -4359,7 +4335,7 @@ func TestRecursiveUpload403WithSync(t *testing.T) {
 // ETag from the HTTP response and returns it to the caller.
 func TestDownloadHTTPETag(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 	ctx, _, _ := test_utils.TestContext(context.Background(), t)
 
 	expectedETag := `"abc123def456"`
@@ -4398,7 +4374,7 @@ func TestDownloadHTTPETag(t *testing.T) {
 // provide an ETag header, downloadHTTP returns an empty string.
 func TestDownloadHTTPETagMissing(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 	ctx, _, _ := test_utils.TestContext(context.Background(), t)
 
 	body := []byte("No ETag here")
@@ -4429,7 +4405,7 @@ func TestDownloadHTTPETagMissing(t *testing.T) {
 // on the provided channel before starting the data transfer.
 func TestMetadataChannel(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 	ctx, _, _ := test_utils.TestContext(context.Background(), t)
 
 	expectedETag := `"meta-etag-789"`
@@ -4479,7 +4455,7 @@ func TestMetadataChannel(t *testing.T) {
 // the metadata channel is nil.
 func TestMetadataChannelNil(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 	ctx, _, _ := test_utils.TestContext(context.Background(), t)
 
 	body := []byte("no channel")
@@ -4509,7 +4485,7 @@ func TestMetadataChannelNil(t *testing.T) {
 // and receives a byte range from the server.
 func TestDownloadHTTPByteRange(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 	ctx, _, _ := test_utils.TestContext(context.Background(), t)
 
 	fullBody := []byte("0123456789ABCDEFGHIJ") // 20 bytes
@@ -4557,7 +4533,7 @@ func TestDownloadHTTPByteRange(t *testing.T) {
 // when bytesSoFar > 0 for resume functionality.
 func TestDownloadHTTPResume(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 	ctx, _, _ := test_utils.TestContext(context.Background(), t)
 
 	fullBody := []byte("Hello, resume world! This is a test of resume functionality.")
@@ -4669,7 +4645,7 @@ func TestUploadETag(t *testing.T) {
 // while ObjectSize reflects the full object size from Content-Range.
 func TestMetadataChannelByteRange(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
-	test_utils.InitClientForTest(t, map[param.Param]any{})
+	test_utils.InitClientForTest(t, nil)
 	ctx, _, _ := test_utils.TestContext(context.Background(), t)
 
 	fullBody := []byte("0123456789ABCDEFGHIJ") // 20 bytes

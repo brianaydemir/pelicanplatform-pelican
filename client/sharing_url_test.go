@@ -65,8 +65,11 @@ func TestSharingUrl(t *testing.T) {
 	// Placeholder handler
 	handler := func(w http.ResponseWriter, r *http.Request) {}
 
-	server := httptest.NewTLSServer(http.HandlerFunc(handler))
-	defer server.Close()
+	test_utils.InitClientForTest(t, map[param.Param]any{
+		param.Logging_Level: "debug",
+	})
+
+	var server *httptest.Server
 
 	// Actual handler using the updated server.URL
 	handler = func(w http.ResponseWriter, r *http.Request) {
@@ -120,8 +123,7 @@ func TestSharingUrl(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}
-	// Restart the server with the updated handler
-	server.Config.Handler = http.HandlerFunc(handler)
+	server = test_utils.NewTLSServerForTest(t, http.HandlerFunc(handler))
 
 	_, err := config.SetPreferredPrefix(config.PelicanPrefix)
 	assert.NoError(t, err)
@@ -129,11 +131,7 @@ func TestSharingUrl(t *testing.T) {
 	os.Setenv("PELICAN_SKIP_TERMINAL_CHECK", "password")
 	defer os.Unsetenv("PELICAN_SKIP_TERMINAL_CHECK")
 
-	test_utils.InitClientForTest(t, map[param.Param]any{
-		param.Logging_Level:           "debug",
-		param.TLSSkipVerify:           true,
-		param.Federation_DiscoveryUrl: server.URL,
-	})
+	require.NoError(t, param.Federation_DiscoveryUrl.Set(server.URL))
 
 	// Call QueryDirector with the test server URL and a source path
 	testObj, err := url.Parse("/test/foo/bar")

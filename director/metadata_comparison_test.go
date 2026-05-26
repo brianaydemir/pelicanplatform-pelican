@@ -221,18 +221,11 @@ func TestCompareMetadata(t *testing.T) {
 		defer config.ResetConfig()
 		ResetMetadataDiscrepancyForTest()
 
-		// Set up mock where director URL equals discovery URL
-		fedInfo := pelican_url.FederationDiscovery{
-			DirectorEndpoint: "https://director.example.com",
-			RegistryEndpoint: "https://registry.example.com",
-		}
-		test_utils.MockFederationRoot(t, &fedInfo, nil)
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: "https://director.example.com",
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
 			param.Server_ExternalWebUrl:   "https://director.example.com",
-			param.TLSSkipVerify:           true,
 		})
 
 		ctx := context.Background()
@@ -249,17 +242,10 @@ func TestCompareMetadata(t *testing.T) {
 		defer config.ResetConfig()
 		ResetMetadataDiscrepancyForTest()
 
-		// Set up mock with empty discovery URL
-		fedInfo := pelican_url.FederationDiscovery{
-			DirectorEndpoint: "https://director.example.com",
-			RegistryEndpoint: "https://registry.example.com",
-		}
-		test_utils.MockFederationRoot(t, &fedInfo, nil)
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DirectorUrl: "https://director.example.com",
 			param.Federation_RegistryUrl: "https://registry.example.com",
 			param.Server_ExternalWebUrl:  "https://director.example.com",
-			param.TLSSkipVerify:          true,
 		})
 
 		ctx := context.Background()
@@ -293,19 +279,11 @@ func TestCompareMetadata(t *testing.T) {
 		}))
 		defer discoveryServer.Close()
 
-		// Local federation info (what the Director serves)
-		localFedInfo := pelican_url.FederationDiscovery{
-			DirectorEndpoint:  "https://director.example.com",
-			RegistryEndpoint:  "https://registry.example.com",
-			DiscoveryEndpoint: discoveryServer.URL,
-		}
-		test_utils.MockFederationRoot(t, &localFedInfo, nil)
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: discoveryServer.URL,
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
 			param.Server_ExternalWebUrl:   "https://my-director.example.com",
-			param.TLSSkipVerify:           true,
 		})
 
 		ctx := context.Background()
@@ -343,19 +321,11 @@ func TestCompareMetadata(t *testing.T) {
 		}))
 		defer discoveryServer.Close()
 
-		// Local federation info (what the Director serves)
-		localFedInfo := pelican_url.FederationDiscovery{
-			DirectorEndpoint:  "https://director.example.com",
-			RegistryEndpoint:  "https://registry.example.com",
-			DiscoveryEndpoint: discoveryServer.URL,
-		}
-		test_utils.MockFederationRoot(t, &localFedInfo, nil)
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: discoveryServer.URL,
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
 			param.Server_ExternalWebUrl:   "https://my-director.example.com",
-			param.TLSSkipVerify:           true,
 		})
 
 		ctx := context.Background()
@@ -393,18 +363,11 @@ func TestCompareMetadata(t *testing.T) {
 		}))
 		defer discoveryServer.Close()
 
-		localFedInfo := pelican_url.FederationDiscovery{
-			DirectorEndpoint:  "https://director.example.com",
-			RegistryEndpoint:  "https://registry.example.com",
-			DiscoveryEndpoint: discoveryServer.URL,
-		}
-		test_utils.MockFederationRoot(t, &localFedInfo, nil)
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: discoveryServer.URL,
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
 			param.Server_ExternalWebUrl:   "https://my-director.example.com",
-			param.TLSSkipVerify:           true,
 		})
 
 		ctx := context.Background()
@@ -427,18 +390,11 @@ func TestCompareAndStoreMetadataDiscrepancy(t *testing.T) {
 		defer config.ResetConfig()
 		ResetMetadataDiscrepancyForTest()
 
-		// Set up so Director is the discovery URL (simplest case)
-		fedInfo := pelican_url.FederationDiscovery{
-			DirectorEndpoint: "https://director.example.com",
-			RegistryEndpoint: "https://registry.example.com",
-		}
-		test_utils.MockFederationRoot(t, &fedInfo, nil)
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: "https://director.example.com",
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
 			param.Server_ExternalWebUrl:   "https://director.example.com",
-			param.TLSSkipVerify:           true,
 		})
 
 		ctx := context.Background()
@@ -460,18 +416,11 @@ func TestLaunchMetadataComparisonLoop(t *testing.T) {
 		defer config.ResetConfig()
 		ResetMetadataDiscrepancyForTest()
 
-		// Set up so Director is the discovery URL
-		fedInfo := pelican_url.FederationDiscovery{
-			DirectorEndpoint: "https://director.example.com",
-			RegistryEndpoint: "https://registry.example.com",
-		}
-		test_utils.MockFederationRoot(t, &fedInfo, nil)
 		test_utils.InitClientForTest(t, map[param.Param]any{
 			param.Federation_DiscoveryUrl: "https://director.example.com",
 			param.Federation_DirectorUrl:  "https://director.example.com",
 			param.Federation_RegistryUrl:  "https://registry.example.com",
 			param.Server_ExternalWebUrl:   "https://director.example.com",
-			param.TLSSkipVerify:           true,
 		})
 
 		// Set a short interval for testing

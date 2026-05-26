@@ -200,7 +200,6 @@ func TestOrigin(t *testing.T) {
 	require.NoError(t, param.Origin_EnableVoms.Set(false))
 	require.NoError(t, param.Origin_Port.Set(0))
 	require.NoError(t, param.Server_WebPort.Set(0))
-	require.NoError(t, param.TLSSkipVerify.Set(true))
 	require.NoError(t, param.Logging_Origin_Scitokens.Set("debug"))
 
 	mockupCancel := originMockup(ctx, egrp, t)
@@ -257,7 +256,6 @@ func TestMultiExportOrigin(t *testing.T) {
 	require.NoError(t, param.Origin_EnableVoms.Set(false))
 	require.NoError(t, param.Origin_Port.Set(0))
 	require.NoError(t, param.Server_WebPort.Set(0))
-	require.NoError(t, param.TLSSkipVerify.Set(true))
 	require.NoError(t, param.Logging_Origin_Scitokens.Set("debug"))
 
 	// Initialize the origin before getting origin exports
@@ -307,7 +305,6 @@ func mockupS3Origin(ctx context.Context, egrp *errgroup.Group, t *testing.T, fed
 	require.NoError(t, param.Origin_SelfTest.Set(false))
 	require.NoError(t, param.Origin_Port.Set(0))
 	require.NoError(t, param.Server_WebPort.Set(0))
-	require.NoError(t, param.TLSSkipVerify.Set(true))
 
 	return originMockup(ctx, egrp, t)
 }
@@ -457,7 +454,6 @@ func TestPosixOriginWithSentinel(t *testing.T) {
 	require.NoError(t, param.Origin_EnableVoms.Set(false))
 	require.NoError(t, param.Origin_Port.Set(0))
 	require.NoError(t, param.Server_WebPort.Set(0))
-	require.NoError(t, param.TLSSkipVerify.Set(true))
 	require.NoError(t, param.Logging_Origin_Scitokens.Set("trace"))
 
 	mockupCancel := originMockup(ctx, egrp, t)

@@ -127,13 +127,11 @@ func TestFederationDiscoveryHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server_utils.ResetTestState()
 			fedInfo := pelican_url.FederationDiscovery{DirectorEndpoint: tc.dirUrl, RegistryEndpoint: tc.regUrl}
-			test_utils.MockFederationRoot(t, &fedInfo, nil)
 			test_utils.InitClientForTest(t, map[param.Param]any{
-				param.Federation_DiscoveryUrl: param.Federation_DiscoveryUrl.GetString(),
 				param.Federation_DirectorUrl:  tc.dirUrl,
 				param.Federation_RegistryUrl:  tc.regUrl,
-				param.TLSSkipVerify:           true,
 			})
+			test_utils.MockFederationRoot(t, &fedInfo, nil)
 
 			// Enable federation metadata hosting for the test -- must be done _after_
 			// the test client initialization because that function blows out any existing params
@@ -201,12 +199,10 @@ func TestOidcDiscoveryHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server_utils.ResetTestState()
 			fedInfo := pelican_url.FederationDiscovery{DirectorEndpoint: tc.dirUrl}
-			test_utils.MockFederationRoot(t, &fedInfo, nil)
 			test_utils.InitClientForTest(t, map[param.Param]any{
-				param.Federation_DiscoveryUrl: param.Federation_DiscoveryUrl.GetString(),
 				param.Federation_DirectorUrl:  tc.dirUrl,
-				param.TLSSkipVerify:           true,
 			})
+			test_utils.MockFederationRoot(t, &fedInfo, nil)
 
 			w := httptest.NewRecorder()
 			req, _ := http.NewRequest("GET", "/test"+oidcDiscoveryPath, nil)

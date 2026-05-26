@@ -22,6 +22,8 @@ package xrootd
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	_ "embed"
 	"io/fs"
 	"net"
@@ -123,8 +125,14 @@ func TestOSDFAuthRetrieval(t *testing.T) {
 		return dialer.DialContext(ctx, svr.Listener.Addr().Network(), svr.Listener.Addr().String())
 	}
 	oldConfig := transport.TLSClientConfig
-	transport.TLSClientConfig = svr.TLS.Clone()
-	transport.TLSClientConfig.InsecureSkipVerify = true
+	certPool := x509.NewCertPool()
+	certPool.AddCert(svr.Certificate())
+	serverURL, err := url.Parse(svr.URL)
+	require.NoError(t, err)
+	transport.TLSClientConfig = &tls.Config{
+		RootCAs:    certPool,
+		ServerName: serverURL.Hostname(),
+	}
 	t.Cleanup(func() {
 		transport.DialContext = oldDial
 		transport.TLSClientConfig = oldConfig
@@ -135,7 +143,7 @@ func TestOSDFAuthRetrieval(t *testing.T) {
 	require.NoError(t, param.Server_Hostname.Set("sc-origin.chtc.wisc.edu"))
 
 	originServer := &origin.OriginServer{}
-	_, err := getOSDFAuthFiles(originServer)
+	_, err = getOSDFAuthFiles(originServer)
 
 	require.NoError(t, err, "error")
 	server_utils.ResetTestState()
@@ -1594,7 +1602,6 @@ func TestGenerateFederationIssuer(t *testing.T) {
 			storageDir := test_utils.GetTmpStoragePrefixDir(t) // Create storage dir with permissions for XRootD daemon user
 			require.NoError(t, param.Origin_StoragePrefix.Set(storageDir))
 			require.NoError(t, param.Origin_FederationPrefix.Set("/foo/bar"))
-			require.NoError(t, param.TLSSkipVerify.Set(true))
 
 			test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 			test_utils.MockFederationRoot(t, nil, nil)

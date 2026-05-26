@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net"
 	"net/http"
@@ -146,9 +147,14 @@ func TestUpdateCert(t *testing.T) {
 		require.NoError(t, err)
 		defer conn.Close()
 
+		certPEM, err := os.ReadFile(param.Server_TLSCACertificateFile.GetString())
+		require.NoError(t, err)
+		certPool := x509.NewCertPool()
+		require.True(t, certPool.AppendCertsFromPEM(certPEM))
+
 		tlsConfig := &tls.Config{
-			InsecureSkipVerify: true,
-			ServerName:         param.Server_WebHost.GetString(),
+			RootCAs:    certPool,
+			ServerName: param.Server_Hostname.GetString(),
 		}
 		tlsConn := tls.Client(conn, tlsConfig)
 		err = tlsConn.Handshake()

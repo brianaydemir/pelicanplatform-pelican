@@ -194,6 +194,7 @@ func TestDirectorRegistration(t *testing.T) {
 	require.NoError(t, param.Director_CacheSortMethod.Set("distance"))
 	require.NoError(t, param.Director_StatTimeout.Set(300*time.Millisecond))
 	require.NoError(t, param.Director_StatConcurrencyLimit.Set(1))
+	test_utils.InitClientForTest(t, nil)
 	test_utils.MockFederationRoot(t, &pelican_url.FederationDiscovery{
 		RegistryEndpoint: ts.URL,
 	}, nil)
@@ -1601,8 +1602,6 @@ func TestDiscoverOriginCache(t *testing.T) {
 
 	privateKey, err := config.GetIssuerPrivateJWK()
 	assert.NoError(t, err, "Error fetching private key for test")
-
-	require.NoError(t, param.TLSSkipVerify.Set(true))
 
 	ctx, cancel, egrp := test_utils.TestContext(context.Background(), t)
 	defer func() { require.NoError(t, egrp.Wait()) }()
