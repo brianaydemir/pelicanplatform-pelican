@@ -106,7 +106,7 @@ func setupTestEnvironment(t *testing.T) (apiClient *apiclient.APIClient, fed *fe
 	socketPath := serverConfig.SocketPath
 
 	ctx, cancel, _ := test_utils.TestContext(context.Background(), t)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	server, err := client_agent.NewServer(ctx, serverConfig)
 	require.NoError(t, err)
