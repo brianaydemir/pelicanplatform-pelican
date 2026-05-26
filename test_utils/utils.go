@@ -50,6 +50,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pelicanplatform/pelican/config"
+	"github.com/pelicanplatform/pelican/config/configtest"
 	"github.com/pelicanplatform/pelican/logging"
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/pelican_url"
@@ -259,10 +260,10 @@ func applyInitCfg(t *testing.T, caller string, initCfg map[param.Param]any) {
 
 // InitClientForTest initializes the Pelican client for a unit test.
 //
-// It resets all configuration to a clean state, sets ConfigDir to
-// a temporary directory, writes an empty pelican.yaml there
-// to shadow any system-wide config file, clears federation URL overrides,
-// and calls config.InitClient.
+// It resets config, points ConfigDir at a temporary directory,
+// shadows any system-wide pelican.yaml with an empty local one,
+// clears federation URL overrides, provisions test-owned TLS files,
+// and initializes the client.
 //
 // The initCfg map uses typed param constants as keys; values are set
 // through the param's typed Set method where possible.
@@ -279,32 +280,32 @@ func InitClientForTest(t *testing.T, initCfg map[param.Param]any) {
 	// never fall through to /etc/pelican/pelican.yaml.
 	require.NoError(t, os.WriteFile(filepath.Join(cfgDir, "pelican.yaml"), []byte{}, 0600))
 
-	// However, the empty file is not sufficient on its own.
-	//
-	// InitConfigInternal (called by InitClient) first calls
-	// SetBaseDefaultsInConfig, which merges osdf.yaml when the OSDF
-	// prefix is active.
-	//
-	// That merge injects Federation.DiscoveryUrl = https://osg-htc.org
-	// at config-file priority,
-	// before our empty pelican.yaml is even read.
-	//
-	// Without clearing the federation URLs, any subsequent call
-	// to GetFederation() would attempt a live HTTP discovery call to
-	// osg-htc.org.
+	// InitClient merges OSDF defaults before reading pelican.yaml,
+	// so clear federation URLs here to avoid live discovery lookups
+	// during tests.
 	ClearFederationURLsForTest(t)
 
-	// Apply caller params before InitClient so that they are in place
-	// when InitClient first reads them (e.g., Client_IsPlugin affects
-	// SetClientDefaults; TLSSkipVerify affects setupTransport).
+	// Apply caller params before cert generation and InitClient
+	// so that they can influence inputs such as Server.Hostname
+	// and Client.IsPlugin.
 	applyInitCfg(t, "InitClientForTest", initCfg)
+
+	// Use localhost unless the caller chose a specific hostname.
+	// The generated host cert must match the name later used for
+	// TLS validation.
+	if !param.Server_Hostname.IsSet() {
+		require.NoError(t, param.Server_Hostname.Set("localhost"))
+	}
+
+	// GenerateCert writes the test CA and host cert to test-owned
+	// paths, and InitClient must run afterward so its shared transport
+	// trusts that CA.
+	InitServerTLSForTest(t, cfgDir)
+	require.NoError(t, config.GenerateCert())
 	require.NoError(t, config.InitClient())
 
-	// Re-apply caller params after InitClient because SetClientDefaults
-	// calls viper.Set() — override priority — on certain params
-	// (e.g., Client_DirectorRetries when Client_IsPlugin is true
-	// or the value is below the minimum).
-	// This ensures that caller-supplied values survive.
+	// Re-apply caller params because InitClient may overwrite
+	// some of them via SetClientDefaults.
 	applyInitCfg(t, "InitClientForTest", initCfg)
 }
 
@@ -346,16 +347,26 @@ func GetUniqueAvailablePorts(count int) ([]int, error) {
 	return portList, nil
 }
 
-// MockFederationRoot starts a TLS test server that answers
-// federation-discovery requests and wires Viper to treat it as
-// the federation discovery URL.
+// NewTLSServerForTest starts an HTTPS server with an ephemeral localhost leaf
+// certificate signed by an already-provisioned test CA.
+//
+// The CA must already exist on disk: Server.TLSCACertificateFile and
+// Server.TLSCAKey must be set, and both files must be present at those paths.
+func NewTLSServerForTest(t testing.TB, handler http.Handler) *httptest.Server {
+	t.Helper()
+	return configtest.NewTLSServerForTest(t, handler)
+}
+
+// MockFederationRoot starts a TLS test server that serves federation
+// discovery metadata and the issuer JWKS, then points discovery config at it.
 //
 // fInfo overrides individual fields of the default discovery response;
 // nil uses built-in fake URLs for director, registry, and broker.
 // kSet overrides the issuer key set; nil derives keys from IssuerKeysDirectory.
 //
-// Must be called after InitServerForTest: InitServer eagerly consumes the
-// federation-discovery sync.Once, and MockFederationRoot resets it afterward.
+// Call this only after InitClientForTest or InitServerForTest, which set
+// up the TLS paths, generate the CA, and establish client transport trust.
+// Subsequent discovery lookups will use the mock server.
 func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kSet *jwk.Set) {
 	// Clear any federation URL params already set in Viper
 	// so that discoverFederationImpl does not short-circuit
@@ -420,7 +431,7 @@ func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kS
 		}
 	}
 
-	server := httptest.NewTLSServer(http.HandlerFunc(responseHandler))
+	server := NewTLSServerForTest(t, http.HandlerFunc(responseHandler))
 	serverUrl := server.URL
 	getInternalFInfo = func() pelican_url.FederationDiscovery {
 		internalFInfo := pelican_url.FederationDiscovery{
@@ -451,17 +462,7 @@ func MockFederationRoot(t *testing.T, fInfo *pelican_url.FederationDiscovery, kS
 		return internalFInfo
 	}
 
-	t.Cleanup(server.Close)
-
 	require.NoError(t, param.Federation_DiscoveryUrl.Set(serverUrl))
-	require.NoError(t, param.TLSSkipVerify.Set(true))
-
-	// Reset the transport so that the next GetTransport/GetClient call
-	// re-runs setupTransport with TLSSkipVerify=true.
-	// Without this, if a prior call had consumed the sync.Once
-	// with TLSSkipVerify=false, the mock TLS server's self-signed cert
-	// would now be unverifiable.
-	config.ResetTransport()
 
 	// Reset the cached discovery result so the next GetFederation call
 	// queries this mock server rather than returning a cached result from
@@ -684,14 +685,10 @@ func formatEntry(entry *logrus.Entry) string {
 
 // InitServerTLSForTest redirects all TLS key and certificate parameters
 // to paths inside dir, isolating tests from host configuration.
-// Call after ResetTestState and before InitServer;
-// InitServer generates any missing certs and keys on the fly.
+// Call before any function that generates or reads TLS credentials.
 func InitServerTLSForTest(t testing.TB, dir string) {
 	t.Helper()
-	require.NoError(t, param.Server_TLSKey.Set(filepath.Join(dir, "tls.key")))
-	require.NoError(t, param.Server_TLSCertificateChain.Set(filepath.Join(dir, "tls.crt")))
-	require.NoError(t, param.Server_TLSCACertificateFile.Set(filepath.Join(dir, "ca.crt")))
-	require.NoError(t, param.Server_TLSCAKey.Set(filepath.Join(dir, "ca.key")))
+	configtest.InitServerTLSForTest(t, dir)
 }
 
 // InitServerForTest prepares a test-owned server configuration
