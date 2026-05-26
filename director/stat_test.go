@@ -833,7 +833,6 @@ func TestCache(t *testing.T) {
 
 	require.NoError(t, param.Reset())
 	require.NoError(t, param.Logging_Level.Set("Debug"))
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 
 	var reqCounter atomic.Int32
 
@@ -967,11 +966,7 @@ func TestSendHeadReq(t *testing.T) {
 	mockOriginAd := server_structs.ServerAd{Type: server_structs.OriginType.String()}
 	mockOriginAd.URL = *realServerUrl
 
-	tDir := t.TempDir()
-	kDir := filepath.Join(tDir, "testKeyDir")
-	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
-
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
+	require.NoError(t, param.IssuerKeysDirectory.Set(filepath.Join(t.TempDir(), "testKeyDir")))
 
 	initServerForTest(t, context.Background(), server_structs.DirectorType)
 

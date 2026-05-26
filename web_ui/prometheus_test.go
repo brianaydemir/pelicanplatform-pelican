@@ -63,11 +63,8 @@ func TestPrometheusUnprotected(t *testing.T) {
 	})
 
 	// Create temp dir for the origin key file
-	tDir := t.TempDir()
-	kDir := filepath.Join(tDir, "testKeyDir")
 	//Setup a private key
-	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
+	require.NoError(t, param.IssuerKeysDirectory.Set(filepath.Join(t.TempDir(), "testKeyDir")))
 
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 	test_utils.MockFederationRoot(t, nil, nil)
@@ -110,11 +107,8 @@ func TestPrometheusProtectionCookieAuth(t *testing.T) {
 	av1 := route.New().WithPrefix("/api/v1.0/prometheus")
 
 	// Create temp dir for the origin key file
-	tDir := t.TempDir()
-	kDir := filepath.Join(tDir, "testKeyDir")
 	// Setup a private key directory
-	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
+	require.NoError(t, param.IssuerKeysDirectory.Set(filepath.Join(t.TempDir(), "testKeyDir")))
 
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 	test_utils.MockFederationRoot(t, nil, nil)
@@ -318,10 +312,7 @@ func TestPrometheusRulesEndpoint(t *testing.T) {
 	})
 
 	// Create temp dir for the origin key file
-	tDir := t.TempDir()
-	kDir := filepath.Join(tDir, "testKeyDir")
-	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
+	require.NoError(t, param.IssuerKeysDirectory.Set(filepath.Join(t.TempDir(), "testKeyDir")))
 
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 	test_utils.MockFederationRoot(t, nil, nil)
@@ -401,10 +392,7 @@ func TestPrometheusAlertsEndpoint(t *testing.T) {
 	})
 
 	// Create temp dir for the origin key file
-	tDir := t.TempDir()
-	kDir := filepath.Join(tDir, "testKeyDir")
-	require.NoError(t, param.IssuerKeysDirectory.Set(kDir))
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
+	require.NoError(t, param.IssuerKeysDirectory.Set(filepath.Join(t.TempDir(), "testKeyDir")))
 
 	test_utils.InitServerForTest(t, ctx, server_structs.OriginType)
 	test_utils.MockFederationRoot(t, nil, nil)

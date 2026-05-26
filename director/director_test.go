@@ -1608,7 +1608,6 @@ func TestDiscoverOriginCache(t *testing.T) {
 	defer cancel()
 
 	// Isolate the test so it doesn't use system config
-	require.NoError(t, param.ConfigDir.Set(t.TempDir()))
 	initServerForTest(t, ctx, server_structs.DirectorType)
 	// Set up the mock federation so auth-related discovery happens after init resets discovery config.
 	test_utils.MockFederationRoot(t, nil, &pKeySet)

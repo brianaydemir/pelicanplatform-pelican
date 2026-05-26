@@ -30,9 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
-
-	"github.com/pelicanplatform/pelican/config"
+	"github.com/pelicanplatform/pelican/test_utils"
 )
 
 func TestCreateJob(t *testing.T) {
@@ -369,11 +367,8 @@ func TestTransferManagerConcurrency(t *testing.T) {
 func TestShutdownHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel, egrp := test_utils.TestContext(context.Background(), t)
 	defer cancel()
-
-	egrp, egrpCtx := errgroup.WithContext(ctx)
-	ctx = context.WithValue(egrpCtx, config.EgrpKey, egrp)
 
 	tm := NewTransferManager(ctx, 5, nil)
 	defer func() {
