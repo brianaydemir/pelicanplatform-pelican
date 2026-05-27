@@ -134,6 +134,10 @@ Origin:
 	tlsCAPath := param.Server_TLSCACertificateFile.GetString()
 	require.NotEmpty(t, tlsCAPath)
 
+	// The CA cert is created 0640; the HTCondor slot user needs to
+	// read it, so make it world-readable.
+	require.NoError(t, os.Chmod(tlsCAPath, 0644))
+
 	// Poll for director health
 	deadline := time.Now().Add(30 * time.Second)
 	healthClient := config.GetClient()
