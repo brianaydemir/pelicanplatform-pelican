@@ -1,6 +1,6 @@
 /***************************************************************
  *
- * Copyright (C) 2024, University of Nebraska-Lincoln
+ * Copyright (C) 2026, University of Nebraska-Lincoln
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License.  You may
@@ -444,10 +444,10 @@ func TestParseRemoteAsPUrl(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:     "test valid path with configured global discovery url",
-			rp:       "/foo/bar",
-			discEP:   "DISCOVERY_HOST",
-			dirEP:    "",
+			name:   "test valid path with configured global discovery url",
+			rp:     "/foo/bar",
+			discEP: "DISCOVERY_HOST",
+			dirEP:  "",
 		},
 		{
 			name:      "test valid path that falls back to configured director for discovery",
@@ -498,9 +498,9 @@ func TestParseRemoteAsPUrl(t *testing.T) {
 
 			require.NoError(t, err)
 			expected := &pelican_url.PelicanURL{
-				Scheme: "pelican",
-				Host:   discURL.Host,
-				Path:   "/foo/bar",
+				Scheme:  "pelican",
+				Host:    discURL.Host,
+				Path:    "/foo/bar",
 				FedInfo: fedInfo,
 			}
 			switch {

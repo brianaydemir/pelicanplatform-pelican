@@ -1,6 +1,6 @@
 /***************************************************************
  *
- * Copyright (C) 2025, Pelican Project, Morgridge Institute for Research
+ * Copyright (C) 2026, Pelican Project, Morgridge Institute for Research
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License.  You may
@@ -128,8 +128,8 @@ func TestFederationDiscoveryHandler(t *testing.T) {
 			server_utils.ResetTestState()
 			fedInfo := pelican_url.FederationDiscovery{DirectorEndpoint: tc.dirUrl, RegistryEndpoint: tc.regUrl}
 			test_utils.InitClientForTest(t, map[param.Param]any{
-				param.Federation_DirectorUrl:  tc.dirUrl,
-				param.Federation_RegistryUrl:  tc.regUrl,
+				param.Federation_DirectorUrl: tc.dirUrl,
+				param.Federation_RegistryUrl: tc.regUrl,
 			})
 			test_utils.MockFederationRoot(t, &fedInfo, nil)
 
@@ -200,7 +200,7 @@ func TestOidcDiscoveryHandler(t *testing.T) {
 			server_utils.ResetTestState()
 			fedInfo := pelican_url.FederationDiscovery{DirectorEndpoint: tc.dirUrl}
 			test_utils.InitClientForTest(t, map[param.Param]any{
-				param.Federation_DirectorUrl:  tc.dirUrl,
+				param.Federation_DirectorUrl: tc.dirUrl,
 			})
 			test_utils.MockFederationRoot(t, &fedInfo, nil)
 
