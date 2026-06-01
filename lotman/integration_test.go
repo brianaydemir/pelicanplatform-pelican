@@ -29,8 +29,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pelicanplatform/pelican/config"
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/server_structs"
+	"github.com/pelicanplatform/pelican/server_utils"
 	"github.com/pelicanplatform/pelican/test_utils"
 )
 
@@ -54,12 +56,12 @@ import (
 // completes in well under a second.
 func TestRenewalEndToEnd(t *testing.T) {
 	t.Cleanup(test_utils.SetupTestLogging(t))
+	server_utils.ResetTestState()
+	test_utils.InitServerTLSForTest(t, t.TempDir())
+	require.NoError(t, config.GenerateCert())
+	test_utils.MockFederationRoot(t, nil, nil)
 
-	server := getMockDiscoveryHost()
-	defer server.Close()
-	require.NoError(t, param.Federation_DiscoveryUrl.Set(server.URL))
-
-	success, cleanup := setupLotmanFromConf(t, false, "LotmanRenewalE2E", server.URL, nil)
+	success, cleanup := setupLotmanFromConf(t, false, "LotmanRenewalE2E", param.Federation_DiscoveryUrl.GetString(), nil)
 	defer cleanup()
 	require.True(t, success, "InitLotman must succeed")
 

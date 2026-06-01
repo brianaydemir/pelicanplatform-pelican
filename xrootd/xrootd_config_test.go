@@ -780,9 +780,7 @@ func TestAutoShutdownOnStaleAuthfile(t *testing.T) {
 	test_utils.InitServerForTest(t, ctx, server_structs.CacheType)
 	test_utils.MockFederationRoot(t, nil, nil)
 
-	// Init cache server
-
-	// Set timeout AFTER InitServer as a string to ensure correct parsing
+	// Use SetString so the duration is parsed correctly.
 	require.NoError(t, param.Xrootd_ConfigUpdateFailureTimeout.SetString("50ms"))
 	require.NoError(t, param.Xrootd_AutoShutdownEnabled.Set(true))
 
@@ -903,8 +901,8 @@ func TestLaunchXrootdMaintenanceSeedsHealthStatus(t *testing.T) {
 	scitokensPath := filepath.Join(dir, "scitokens.cfg")
 	require.NoError(t, os.WriteFile(scitokensPath, []byte(""), 0600))
 	require.NoError(t, param.Xrootd_ScitokensConfig.Set(scitokensPath))
+	test_utils.InitServerForTest(t, ctx, server_structs.CacheType)
 	test_utils.MockFederationRoot(t, nil, nil)
-	require.NoError(t, config.InitServer(ctx, server_structs.CacheType))
 
 	// Launch the maintenance routine with a very long tick so the first
 	// maintenance cycle has not run by the time we read the status. The
