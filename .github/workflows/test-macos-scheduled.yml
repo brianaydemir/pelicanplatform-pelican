@@ -22,13 +22,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Download artifacts
+      - name: Analyze test results
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          bash .github/scripts/analyze-junit-results/download_junit_artifacts.sh "Run Tests (macOS) [on schedule]"
+          python3 .github/scripts/analyze-junit-results/analyze_junit_results.py \
+            --workflow "Run Tests (macOS) [on schedule]" \
+            --artifacts-dir artifacts
 
-      - name: Analyze test results
-        run: |
-          python3 .github/scripts/analyze-junit-results/analyze_junit_results.py
-          cat test-failure-analysis.md >> $GITHUB_STEP_SUMMARY
+      - name: Upload failure report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-failure-report-${{ runner.os }}
+          path: artifacts/test-failure-report.md
+          overwrite: true
