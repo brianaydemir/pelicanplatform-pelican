@@ -36,4 +36,4 @@ jobs:
       - name: Analyze test results
         run: |
           python3 .github/scripts/analyze-junit-results/analyze_junit_results.py
-          cat test-failure-analysis.md >> $GITHUB_STEP_SUMMARY
+          cat test-failure-analysis.md >> "$GITHUB_STEP_SUMMARY"

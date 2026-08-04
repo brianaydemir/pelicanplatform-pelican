@@ -76,7 +76,7 @@ jobs:
         id: go-version
         run: |
           version=$(grep -E '^go[[:space:]]*[0-9]+\.[0-9]+' go.mod | grep -oE '[0-9]+\.[0-9]+')
-          echo "version=${version}.x" >> $GITHUB_OUTPUT
+          echo "version=${version}.x" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -89,7 +89,7 @@ jobs:
           if ! command -v gotestsum &> /dev/null; then
             go install gotest.tools/gotestsum@latest
             # Ensure that ~/go/bin is in PATH for subsequent steps.
-            echo "$HOME/go/bin" >> $GITHUB_PATH
+            echo "$HOME/go/bin" >> "$GITHUB_PATH"
           fi
 
       - name: Run "go test"
@@ -132,12 +132,12 @@ jobs:
         id: cc
         run: |
           set -x
-          cc_total=`go tool cover -func=${{ matrix.coverprofile }} | grep total | grep -Eo '[0-9]+\.[0-9]+'`
-          echo "cc_total=$cc_total" >> $GITHUB_OUTPUT
+          cc_total=$(go tool cover -func=${{ matrix.coverprofile }} | grep total | grep -Eo '[0-9]+\.[0-9]+')
+          echo "cc_total=$cc_total" >> "$GITHUB_OUTPUT"
 
       - name: Add coverage information to action summary
         if: github.event_name == 'pull_request'
-        run: echo 'Code coverage ${{ steps.cc.outputs.cc_total }}%' >> $GITHUB_STEP_SUMMARY
+        run: echo 'Code coverage ${{ steps.cc.outputs.cc_total }}%' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Mark the checkout as safe
         # Because we're using a custom container image to run this workflow,

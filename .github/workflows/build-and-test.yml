@@ -130,8 +130,11 @@ jobs:
           if ${PUSH_DEVTEST}; then
             IMAGES+=(pelican-dev pelican-test)
           fi
-          # Turn a space-delimited list into a JSON list.
-          IMAGES="$(jq -cr '. | split(" ") | unique' <<< '"'"${IMAGES[*]}"'"')"
+          # Turn a space-delimited list into a JSON list. Keep the result in
+          # its own variable: assigning a string to IMAGES would write to
+          # IMAGES[0] rather than replace the array, leaving the appended
+          # names behind at indices 1..n.
+          IMAGES_JSON="$(jq -cr '. | split(" ") | unique' <<< '"'"${IMAGES[*]}"'"')"
 
           # In order to form the matrix in build-images below, we need
           # the list of architectures being targeted so that we can take
@@ -155,10 +158,10 @@ jobs:
             ]'
           fi
 
-          printf 'ARCHITECTURES=%s\n'        "${ARCHITECTURES}" >> $GITHUB_OUTPUT
-          printf 'PLATFORMS<<EOF\n%s\nEOF\n' "${PLATFORMS}"     >> $GITHUB_OUTPUT
-          printf 'IMAGES=%s\n'               "${IMAGES}"        >> $GITHUB_OUTPUT
-          printf 'REGISTRY_REPO=%s\n'        "${REGISTRY_REPO}" >> $GITHUB_OUTPUT
+          printf 'ARCHITECTURES=%s\n'        "${ARCHITECTURES}" >> "$GITHUB_OUTPUT"
+          printf 'PLATFORMS<<EOF\n%s\nEOF\n' "${PLATFORMS}"     >> "$GITHUB_OUTPUT"
+          printf 'IMAGES=%s\n'               "${IMAGES_JSON}"   >> "$GITHUB_OUTPUT"
+          printf 'REGISTRY_REPO=%s\n'        "${REGISTRY_REPO}" >> "$GITHUB_OUTPUT"
 
   tags:
     name: Set image tags
@@ -173,7 +176,7 @@ jobs:
 
       - name: Set timestamp
         id: timestamp
-        run: echo "TIMESTAMP=$(date -u +%Y%m%d-%H%M)" >> $GITHUB_OUTPUT
+        run: echo "TIMESTAMP=$(date -u +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
 
       - name: Set whether to tag this build with "latest"
         id: is_latest
@@ -185,9 +188,9 @@ jobs:
           echo "Highest release tag: ${highest_tag}"
 
           if [ "${GITHUB_REF##*/}" = "${highest_tag}" ]; then
-            echo "IS_LATEST=true" >> $GITHUB_OUTPUT
+            echo "IS_LATEST=true" >> "$GITHUB_OUTPUT"
           else
-            echo "IS_LATEST=false" >> $GITHUB_OUTPUT
+            echo "IS_LATEST=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set the tag to use for this build
@@ -205,14 +208,14 @@ jobs:
           fi
 
           echo "SHA for current ref:"
-          echo $(git rev-parse $GITHUB_REF_NAME)
+          git rev-parse "$GITHUB_REF_NAME"
 
           echo "SHA for HEAD:"
-          echo $(git rev-parse HEAD)
+          git rev-parse HEAD
 
           echo "Computed tag:"
-          echo $TAG
-          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          echo "$TAG"
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
 
   # Building the Pelican binary and putting together an XRootD install
   # are time consuming tasks that are needed by all of Pelican's images.
@@ -479,9 +482,20 @@ jobs:
       - name: Create and push manifest
         working-directory: ${{ runner.temp }}/digests
         run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+          # Build the argument vector explicitly. The previous form relied on
+          # word splitting an unquoted command substitution, which breaks on
+          # any tag or filename containing whitespace or a glob character.
+          TAG_ARGS=()
+          while IFS= read -r tag; do
+            TAG_ARGS+=(-t "$tag")
+          done < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+
+          DIGEST_ARGS=()
+          for digest in *; do
+            DIGEST_ARGS+=('${{ env.REGISTRY_IMAGE }}'"@sha256:$digest")
+          done
+
+          docker buildx imagetools create "${TAG_ARGS[@]}" "${DIGEST_ARGS[@]}"
 
   # The macOS and Windows tests do not depend on the container images being
   # built above. Thus, there are separate workflows for running those tests:
