@@ -16,7 +16,7 @@ permissions:
 jobs:
   web-build:
     name: Build Web UI
-    if: ${{ github.repository == 'PelicanPlatform/pelican' }}
+    # if: ${{ github.repository == 'PelicanPlatform/pelican' }}
     runs-on: ubuntu-latest
     # This job exists so that "npm ci" never runs on a runner that holds a
     # write-scoped token. It is GoReleaser's "before" hook, hoisted out of
@@ -80,7 +80,7 @@ jobs:
   goreleaser:
     name: GoReleaser
     needs: web-build
-    if: ${{ github.repository == 'PelicanPlatform/pelican' }}
+    # if: ${{ github.repository == 'PelicanPlatform/pelican' }}
     runs-on: ubuntu-latest
     # Nothing here runs npm, and "--skip=before" keeps GoReleaser from
     # running the hooks that would.
