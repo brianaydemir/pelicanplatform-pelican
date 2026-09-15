@@ -73,6 +73,16 @@ jobs:
           # GOOS=linux the canonical writer.
           skip-save-cache: ${{ matrix.goos != 'linux' }}
 
+      # The run above cannot tell a working ruleguard rule from a dead
+      # one: a rule that matches nothing reports the same "0 issues" as
+      # a clean repository. This lints a fixture per rule, each of which
+      # must produce the diagnostics it is marked for, and fails on a
+      # rule that has no fixture at all.
+      # Linux only, because the fixtures are platform-independent.
+      - name: Verify the ruleguard rules
+        if: matrix.goos == 'linux'
+        run: .github/scripts/check-ruleguard-rules.sh
+
       # Run the pre-commit hooks only on Linux because they are
       # platform-independent; running them on all platforms simply
       # wastes resources.

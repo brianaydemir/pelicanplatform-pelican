@@ -36,9 +36,28 @@ run:
 
 linters:
   enable:
+    - gocritic
     - misspell
   disable:
     - staticcheck
+  settings:
+    gocritic:
+      # Only the ruleguard driver is wanted here. Without "disable-all",
+      # enabling gocritic would also switch on its whole default check set
+      # across the repository.
+      disable-all: true
+      enabled-checks:
+        # "ruleguard" is tagged experimental, so it has to be named explicitly;
+        # it is never enabled by a tag.
+        - ruleguard
+      settings:
+        ruleguard:
+          # "${config-path}" is the directory holding this file, so the
+          # rules resolve the same from a subdirectory, from pre-commit,
+          # and from golangci-lint-action.
+          rules: "${config-path}/gorules/*.go"
+          # Fail the run when a rules file cannot be loaded.
+          failOn: "all"
   exclusions:
     generated: lax
     presets:
@@ -51,6 +70,26 @@ linters:
       - builtin$
       - examples$
       - reference$
+
+issues:
+  # Global caps on reported issues; 0 disables a cap.
+  #
+  # "max-same-issues: 0" is load-bearing, not a preference.
+  # .github/scripts/check-ruleguard-rules.sh lints a fixture of
+  # deliberate violations and requires a diagnostic on every marked
+  # line. Every diagnostic from one ruleguard rule carries that rule's
+  # single "report" string, so under the default cap of 3 the fixture
+  # for "gorules/ginctx.go" yields 3 diagnostics instead of 11 and the
+  # check fails with "marked, but nothing was reported there -- the rule
+  # has most likely stopped matching", pointing at the rule rather than
+  # at this line. Restoring the default here is not a cleanup.
+  #
+  # "max-issues-per-linter: 0" is not load-bearing today -- the fixtures
+  # stay under its default of 50 -- but it is the same trap one fixture
+  # further on.
+  max-same-issues: 0
+  max-issues-per-linter: 0
+
 formatters:
   enable:
     - gofmt
