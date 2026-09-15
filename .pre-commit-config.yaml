@@ -55,6 +55,28 @@ repos:
         stages: [pre-push]
       - id: golangci-lint-full
         stages: [manual]
+  - repo: local
+    hooks:
+      # Proves every ruleguard rule still fires. See the script's header.
+      # Runs at pre-push, like golangci-lint above, because it needs a
+      # cold lint cache and so is too slow for every commit.
+      #
+      # This hook is "language: system", so it needs golangci-lint
+      # installed on PATH. The golangci-lint hook above does not provide
+      # one: pre-commit builds that binary into an environment private
+      # to that hook.
+      #
+      # "go.mod" is in the trigger list because a go-ruleguard/dsl bump
+      # is one of the ways a rule could start matching nothing, and that
+      # is invisible without this check. CI runs the script on every
+      # pull request regardless of which files changed.
+      - id: ruleguard-rules-check
+        name: verify the ruleguard rules
+        language: system
+        entry: .github/scripts/check-ruleguard-rules.sh
+        pass_filenames: false
+        files: ^(gorules/|go\.mod$|\.golangci\.yaml$|\.github/scripts/check-ruleguard-rules\.sh$)
+        stages: [pre-push]
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:

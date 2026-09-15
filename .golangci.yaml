@@ -36,9 +36,28 @@ run:
 
 linters:
   enable:
+    - gocritic
     - misspell
   disable:
     - staticcheck
+  settings:
+    gocritic:
+      # Only the ruleguard driver is wanted here. Without "disable-all",
+      # enabling gocritic would also switch on its whole default check set
+      # across the repository.
+      disable-all: true
+      enabled-checks:
+        # "ruleguard" is tagged experimental, so it has to be named explicitly;
+        # it is never enabled by a tag.
+        - ruleguard
+      settings:
+        ruleguard:
+          # "${config-path}" is the directory holding this file, so the
+          # rules resolve the same from a subdirectory, from pre-commit,
+          # and from golangci-lint-action.
+          rules: "${config-path}/gorules/*.go"
+          # Fail the run when a rules file cannot be loaded.
+          failOn: "all"
   exclusions:
     generated: lax
     presets:
@@ -51,6 +70,17 @@ linters:
       - builtin$
       - examples$
       - reference$
+
+issues:
+  # Disable the caps on reported issues (0 means no cap).
+  #
+  # .github/scripts/check-ruleguard-rules.sh requires a diagnostic on
+  # every marked line of a fixture, and every diagnostic from one
+  # ruleguard rule carries the same message, so the default cap of 3 on
+  # identical issues would hide most of them and fail the check.
+  max-same-issues: 0
+  max-issues-per-linter: 0
+
 formatters:
   enable:
     - gofmt

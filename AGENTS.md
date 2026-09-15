@@ -183,6 +183,8 @@ GOOS=darwin golangci-lint run --disable=unused
 GOOS=windows golangci-lint run --disable=unused
 ```
 
+Custom ruleguard rules live in `gorules/`, each with a fixture under `gorules/testdata/<rule>/` that `.github/scripts/check-ruleguard-rules.sh` lints to prove the rule still fires. golangci-lint's cache does not key on the rule files, so after editing one, run it with a fresh `GOLANGCI_LINT_CACHE`.
+
 **Go formatting:**
 
 ```bash
