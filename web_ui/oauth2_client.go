@@ -512,7 +512,7 @@ func generateUserGroupInfo(userInfo map[string]interface{}, idToken map[string]i
 // Get the user's info and issue our token for accessing the web UI.
 func handleOAuthCallback(ctx *gin.Context) {
 	session := sessions.Default(ctx)
-	c := context.Background()
+	bgCtx := context.Background()
 	csrfFromSession := session.Get("oauthstate")
 	if csrfFromSession == nil {
 		ctx.JSON(http.StatusBadRequest,
@@ -565,7 +565,7 @@ func handleOAuthCallback(ctx *gin.Context) {
 
 	// We need this token only to get the user's info.
 	// We will later issue our own token for user access.
-	token, err := oauthConfig.Exchange(c, req.Code)
+	token, err := oauthConfig.Exchange(bgCtx, req.Code)
 	if err != nil {
 		log.Errorf("Error in exchanging code for token:  %v", err)
 		ctx.JSON(http.StatusInternalServerError,
@@ -601,7 +601,7 @@ func handleOAuthCallback(ctx *gin.Context) {
 				return
 			}
 
-			idToken, err = idTokenJWT.AsMap(ctx)
+			idToken, err = idTokenJWT.AsMap(bgCtx)
 			if err != nil {
 				log.Errorf("Error converting OIDC ID token to a map: %v", err)
 				ctx.JSON(http.StatusInternalServerError,
@@ -616,7 +616,7 @@ func handleOAuthCallback(ctx *gin.Context) {
 		log.Debugf("Did not find an OIDC ID token")
 	}
 
-	client := oauthConfig.Client(c, token)
+	client := oauthConfig.Client(bgCtx, token)
 	client.Transport = config.GetTransport()
 
 	userInfoReq, err := http.NewRequest(http.MethodGet, oauthUserInfoUrl, nil)
