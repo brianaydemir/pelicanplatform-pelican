@@ -2320,6 +2320,12 @@ func (pc *PersistentCache) introspectConsistencyHandler(c *gin.Context) {
 	c.Writer.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
 	c.Writer.WriteHeader(http.StatusOK)
 
+	// Bind the request context once, here. Gin returns the *gin.Context
+	// to its pool when this handler returns and the next request
+	// overwrites c.Request, so the scan goroutine below must not read
+	// that field after we are gone.
+	ctx := c.Request.Context()
+
 	// Progress channel — scans write updates here; we stream them below.
 	progressCh := make(chan ScanProgressEvent, 16)
 
@@ -2332,35 +2338,45 @@ func (pc *PersistentCache) introspectConsistencyHandler(c *gin.Context) {
 		defer close(progressCh)
 
 		if metadataScan {
-			if err := pc.consistency.RunMetadataScan(c.Request.Context(), progressCh); err != nil {
+			if err := pc.consistency.RunMetadataScan(ctx, progressCh); err != nil {
 				result.Error = fmt.Sprintf("metadata scan failed: %v", err)
+				if ctx.Err() != nil {
+					// The client hung up, so result.Error never
+					// reaches it and the Info line the scan logged
+					// on the way in is never closed out.
+					log.Infof("Metadata consistency scan ended early, "+
+						"introspect client disconnected: %v", err)
+				}
 			}
 			result.MetadataScanRan = true
 			// Send the "phase done" event.
 			select {
 			case progressCh <- ScanProgressEvent{Phase: "metadata", PercentComplete: 100, Message: "metadata scan complete"}:
-			case <-c.Request.Context().Done():
+			case <-ctx.Done():
 				return
 			}
 		}
 
 		if dataScan {
-			if err := pc.consistency.RunDataScan(c.Request.Context(), progressCh); err != nil {
+			if err := pc.consistency.RunDataScan(ctx, progressCh); err != nil {
 				if result.Error != "" {
 					result.Error += "; "
 				}
 				result.Error += fmt.Sprintf("data scan failed: %v", err)
+				if ctx.Err() != nil {
+					log.Infof("Data integrity scan ended early, "+
+						"introspect client disconnected: %v", err)
+				}
 			}
 			result.DataScanRan = true
 			select {
 			case progressCh <- ScanProgressEvent{Phase: "data", PercentComplete: 100, Message: "data scan complete"}:
-			case <-c.Request.Context().Done():
+			case <-ctx.Done():
 				return
 			}
 		}
 	}()
 
-	ctx := c.Request.Context()
 	flusher, canFlush := c.Writer.(http.Flusher)
 
 	// Stream events as they arrive.
