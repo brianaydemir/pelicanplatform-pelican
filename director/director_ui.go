@@ -433,7 +433,7 @@ func queryOrigins(ctx *gin.Context) {
 	}
 
 	qr := NewObjectStat().Query(
-		ctx,
+		ctx.Request.Context(),
 		path,
 		server_structs.OriginType,
 		queryParams.MinResponses,
