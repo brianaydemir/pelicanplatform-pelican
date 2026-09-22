@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	notificationChan = make(chan bool)
+	notificationChan = server_utils.NewDirectorNotifyChan()
 )
 
 func RegisterCacheAPI(router *gin.Engine, ctx context.Context, egrp *errgroup.Group) {
