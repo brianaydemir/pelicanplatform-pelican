@@ -92,7 +92,9 @@ var allowedGrantTypes = map[string]bool{
 //	@Router       /issuer/admin/clients [get]
 func handleAdminListClients(provider *OIDCProvider) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		clients, err := provider.Storage().ListClients(ctx)
+		rCtx := ctx.Request.Context()
+
+		clients, err := provider.Storage().ListClients(rCtx)
 		if err != nil {
 			log.WithError(err).Warn("Embedded issuer admin: failed to list clients")
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "Failed to list clients"})
@@ -115,8 +117,10 @@ func handleAdminListClients(provider *OIDCProvider) gin.HandlerFunc {
 //	@Router       /issuer/admin/clients/{id} [get]
 func handleAdminGetClient(provider *OIDCProvider) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		rCtx := ctx.Request.Context()
+
 		clientID := ctx.Param("id")
-		detail, err := provider.Storage().GetClientDetail(ctx, clientID)
+		detail, err := provider.Storage().GetClientDetail(rCtx, clientID)
 		if err != nil {
 			if err == fosite.ErrNotFound {
 				ctx.JSON(http.StatusNotFound, gin.H{"error": "not_found", "error_description": "Client not found"})
@@ -144,6 +148,8 @@ func handleAdminGetClient(provider *OIDCProvider) gin.HandlerFunc {
 //	@Router       /issuer/admin/clients [post]
 func handleAdminCreateClient(provider *OIDCProvider) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		rCtx := ctx.Request.Context()
+
 		var req AdminCreateClientRequest
 		if err := ctx.ShouldBindJSON(&req); err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "Invalid JSON body"})
@@ -214,7 +220,7 @@ func handleAdminCreateClient(provider *OIDCProvider) gin.HandlerFunc {
 			Public:        req.Public,
 		}
 
-		if err := provider.Storage().CreateClient(ctx, client); err != nil {
+		if err := provider.Storage().CreateClient(rCtx, client); err != nil {
 			log.WithError(err).Warn("Embedded issuer admin: failed to create client")
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "Failed to create client"})
 			return
@@ -250,9 +256,11 @@ func handleAdminCreateClient(provider *OIDCProvider) gin.HandlerFunc {
 //	@Router       /issuer/admin/clients/{id} [delete]
 func handleAdminDeleteClient(provider *OIDCProvider) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		rCtx := ctx.Request.Context()
+
 		clientID := ctx.Param("id")
 
-		deleted, err := provider.Storage().DeleteClient(ctx, clientID)
+		deleted, err := provider.Storage().DeleteClient(rCtx, clientID)
 		if err != nil {
 			log.WithError(err).Warn("Embedded issuer admin: failed to delete client")
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": "Failed to delete client"})
@@ -293,6 +301,8 @@ type AdminUpdateClientRequest struct {
 //	@Router       /issuer/admin/clients/{id} [put]
 func handleAdminUpdateClient(provider *OIDCProvider) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		rCtx := ctx.Request.Context()
+
 		clientID := ctx.Param("id")
 
 		var req AdminUpdateClientRequest
@@ -325,7 +335,7 @@ func handleAdminUpdateClient(provider *OIDCProvider) gin.HandlerFunc {
 			Scopes:        req.Scopes,
 		}
 
-		updated, err := provider.Storage().UpdateClient(ctx, clientID, update)
+		updated, err := provider.Storage().UpdateClient(rCtx, clientID, update)
 		if err != nil {
 			if err == fosite.ErrNotFound {
 				ctx.JSON(http.StatusNotFound, gin.H{"error": "not_found", "error_description": "Client not found"})
