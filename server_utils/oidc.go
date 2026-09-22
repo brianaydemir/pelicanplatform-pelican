@@ -40,7 +40,7 @@ const (
 // public endpoint.  In almost all cases, these will be the same thing; this is
 // just providing some flexibility.
 func getDirectorBaseUrl(ctx *gin.Context) (directorUrl *url.URL) {
-	fedInfo, err := config.GetFederation(ctx)
+	fedInfo, err := config.GetFederation(ctx.Request.Context())
 	if err != nil {
 		log.Error("Bad server configuration: Federation discovery could not resolve:", err)
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError,

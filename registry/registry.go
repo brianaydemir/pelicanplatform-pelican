@@ -273,7 +273,7 @@ func keySignChallengeCommit(ctx *gin.Context, data *registrationData) (bool, map
 	if err != nil {
 		return false, nil, badRequestError{Message: err.Error()}
 	}
-	fedInfo, err := config.GetFederation(ctx)
+	fedInfo, err := config.GetFederation(ctx.Request.Context())
 	if err != nil {
 		return false, nil, err
 	}
@@ -1194,7 +1194,7 @@ func checkStatusHandler(ctx *gin.Context) {
 			results[prefix] = complete
 			continue
 		}
-		fed, err := config.GetFederation(ctx)
+		fed, err := config.GetFederation(ctx.Request.Context())
 		if err != nil {
 			log.Error("checkNamespaceCompleteHandler: failed to get federaion:", err)
 			ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{

@@ -303,6 +303,55 @@ func TestDiscoverFederation(t *testing.T) {
 	})
 }
 
+// A caller that runs discovery under a deadline of its own sizes that
+// deadline with DiscoveryBudget, so the budget has to cover what the retry
+// loop actually spends: every attempt, plus the backoff between them.  A
+// budget restating the loop's shape from outside this package stops
+// covering it the moment the loop changes -- another attempt, a longer
+// backoff, a second request per attempt -- and a caller that memoizes the
+// outcome then keeps the spurious timeout that follows.  Pin the two
+// together here, where a change to either is a change to this test.
+func TestDiscoveryBudgetCoversRetryLoop(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Never send headers, so every attempt spends its whole
+		// ResponseHeaderTimeout and is retried.
+		<-release
+	}))
+	// Cleanups run LIFO, so release the handler before closing the
+	// server: httptest.Server.Close waits for outstanding requests.
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(release) })
+
+	discUrl, err := url.Parse(server.URL)
+	require.NoError(t, err)
+
+	// Bound all three phases of a request, so their sum is a real ceiling
+	// on one attempt -- the same sum config derives from
+	// Transport.DialerTimeout, Transport.TLSHandshakeTimeout, and
+	// Transport.ResponseHeaderTimeout.
+	const dialTimeout = 100 * time.Millisecond
+	const tlsTimeout = 100 * time.Millisecond
+	const headerTimeout = 300 * time.Millisecond
+	client := &http.Client{Transport: &http.Transport{
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+		DialContext:           (&net.Dialer{Timeout: dialTimeout}).DialContext,
+		TLSHandshakeTimeout:   tlsTimeout,
+		ResponseHeaderTimeout: headerTimeout,
+	}}
+
+	budget := DiscoveryBudget(dialTimeout + tlsTimeout + headerTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+
+	_, err = DiscoverFederation(ctx, client, "", discUrl)
+
+	// The loop gave up on its own terms, having spent every attempt...
+	assert.True(t, errors.Is(err, MetadataTimeoutErr), "expected a metadata timeout, got %v", err)
+	// ...rather than being cut short by the budget meant to cover it.
+	assert.NoError(t, ctx.Err(), "the budget ran out before the retry loop finished: DiscoveryBudget no longer covers the loop")
+}
+
 // Custom round tripper to simulate a network error in startMetadataQuery test
 type CustomRoundTripper struct{}
 

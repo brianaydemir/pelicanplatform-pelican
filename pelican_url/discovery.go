@@ -73,6 +73,23 @@ type (
 	Cache = ttlcache.Cache[string, cacheItem]
 )
 
+const (
+	// MaxDiscoveryAttempts is how many times DiscoverFederation queries
+	// the discovery endpoint before giving up, and DiscoveryRetryBackoff
+	// is the pause it takes between those attempts.
+	//
+	// A caller sizing a deadline for the whole sequence wants
+	// DiscoveryBudget, not a formula built out of these two.  What the
+	// loop spends its time on -- how many round trips an attempt costs,
+	// whether the backoff is fixed, whether the last attempt is followed
+	// by one -- is this package's to change, and a budget derived from
+	// outside it silently stops covering the loop when it does.
+	MaxDiscoveryAttempts = 3
+
+	// See MaxDiscoveryAttempts.
+	DiscoveryRetryBackoff = 2 * time.Second
+)
+
 var (
 	MetadataTimeoutErr *MetadataErr = &MetadataErr{msg: "Timeout when querying metadata"}
 
@@ -310,6 +327,32 @@ func startMetadataQuery(ctx context.Context, httpClient *http.Client, ua string,
 	return
 }
 
+// DiscoveryBudget returns how long DiscoverFederation may need, end to
+// end, when perAttempt bounds a single attempt's round trip.  A caller
+// running discovery under a deadline of its own -- rather than under
+// some request's context -- can size that deadline with this instead of
+// restating the retry loop below from outside the package.
+//
+// The caller supplies only the per-attempt ceiling, because that is the
+// one term this package does not own: the transport, and so the
+// ceiling, belongs to the caller's HTTP client.
+func DiscoveryBudget(perAttempt time.Duration) time.Duration {
+	// One round trip per attempt, and a backoff between attempts but not
+	// after the last one.
+	worst := MaxDiscoveryAttempts*perAttempt +
+		(MaxDiscoveryAttempts-1)*DiscoveryRetryBackoff
+
+	// That is what the work needs assuming it is never descheduled.  A
+	// deadline sized to exactly that would fire the instant the final
+	// attempt returns, so a GC pause, a loaded machine, or the overshoot
+	// time.Sleep is allowed would cut that attempt short and report a
+	// timeout that never happened -- which a caller memoizing the outcome
+	// would then keep.  It also leaves nothing for reading the response
+	// body, which runs under the same deadline.  Overshooting costs
+	// nobody any latency: a caller that cannot wait bounds its own wait.
+	return worst + worst/4
+}
+
 // This function is for discovering federations as specified by a url during a pelican:// transfer.
 // this does not populate global fields and is more temporary per url
 func DiscoverFederation(ctx context.Context, httpClient *http.Client, ua string, discoveryUrl *url.URL) (metadata FederationDiscovery, err error) {
@@ -327,19 +370,24 @@ func DiscoverFederation(ctx context.Context, httpClient *http.Client, ua string,
 	log.Debugln("Performing federation service discovery for against", discoveryUrl.String())
 
 	var result *http.Response
-	for idx := 1; idx <= 3; idx++ {
+	for idx := 1; idx <= MaxDiscoveryAttempts; idx++ {
 		result, err = startMetadataQuery(ctx, httpClient, ua, discoveryUrl)
 		if err == nil {
 			break
 		} else if errors.Is(err, MetadataTimeoutErr) && ctx.Err() == nil {
-			log.Warningln("Timeout occurred when querying discovery URL", discoveryUrl.String(), "for metadata;", 3-idx, "retries remaining")
-			time.Sleep(2 * time.Second)
+			log.Warningln("Timeout occurred when querying discovery URL", discoveryUrl.String(), "for metadata;", MaxDiscoveryAttempts-idx, "retries remaining")
+			if idx < MaxDiscoveryAttempts {
+				// Nothing follows the last attempt but the return
+				// below, so pausing after it would delay an error
+				// and nothing else.
+				time.Sleep(DiscoveryRetryBackoff)
+			}
 		} else {
 			return
 		}
 	}
 	if errors.Is(err, MetadataTimeoutErr) {
-		log.Errorln("3 timeouts occurred when querying discovery URL", discoveryUrl.String())
+		log.Errorln(MaxDiscoveryAttempts, "timeouts occurred when querying discovery URL", discoveryUrl.String())
 		return
 	}
 

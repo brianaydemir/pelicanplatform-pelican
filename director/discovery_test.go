@@ -19,6 +19,7 @@
 package director
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pelicanplatform/pelican/config"
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/pelican_url"
 	"github.com/pelicanplatform/pelican/server_structs"
@@ -152,6 +154,59 @@ func TestFederationDiscoveryHandler(t *testing.T) {
 			assert.Equal(t, tc.expectedReg, dis.RegistryEndpoint)
 		})
 	}
+}
+
+// config.GetFederation memoizes discovery -- and its error -- for the life
+// of the process, so whichever caller runs it first decides the value for
+// every later caller.  That is why the caller's context bounds only that
+// caller's wait: a handler may hand over the request context, and a client
+// that disconnects while discovery is in flight then fails its own request
+// without caching context.Canceled as the federation for everybody.
+//
+// LaunchModules leaves exactly this window open when Server.WebPort is 0:
+// UpdateConfigFromListener re-arms discovery once the listener binds, and
+// the web engine starts serving well before LaunchModules makes its own
+// GetFederation call.  This test drives that window directly.
+func TestFederationDiscoveryHandlerRequestCancellationIsCallerLocal(t *testing.T) {
+	setGinTestMode()
+	t.Cleanup(test_utils.SetupTestLogging(t))
+	router := gin.Default()
+	router.GET("/test", federationDiscoveryHandler)
+
+	server_utils.ResetTestState()
+	test_utils.MockFederationRoot(t, nil, nil)
+	// Deliberately leave the director, registry, broker, and JWKS endpoints
+	// unset: discoverFederationImpl short-circuits without a network call
+	// when all of them are already configured, and this test needs the real
+	// query to happen.
+	test_utils.InitClient(t, map[param.Param]any{
+		param.Federation_DiscoveryUrl: param.Federation_DiscoveryUrl.GetString(),
+		param.TLSSkipVerify:           true,
+	})
+	require.NoError(t, param.Director_EnableFederationMetadataHosting.Set(true))
+
+	// Re-arm discovery so that this request is the one that starts it.
+	config.ResetFederationForTest()
+
+	// An already-cancelled request context is the deterministic stand-in
+	// for a client that disconnects while discovery is in flight.
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req, err := http.NewRequestWithContext(cancelledCtx, http.MethodGet, "/test", nil)
+	require.NoError(t, err)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// This one request fails, which is the right answer for a client that
+	// is no longer listening for it.
+	require.Equal(t, http.StatusInternalServerError, w.Result().StatusCode)
+
+	// The discovery it abandoned still runs, and everybody else still gets
+	// what the federation root served.
+	fedInfo, err := config.GetFederation(context.Background())
+	require.NoError(t, err, "an abandoned request poisoned the memoized federation")
+	assert.Equal(t, "https://fake-director.com", fedInfo.DirectorEndpoint)
+	assert.Equal(t, "https://fake-registry.com", fedInfo.RegistryEndpoint)
 }
 
 func TestOidcDiscoveryHandler(t *testing.T) {

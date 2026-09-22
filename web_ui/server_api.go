@@ -191,7 +191,7 @@ func HandleCreateDowntime(ctx *gin.Context) {
 	serverType := server_structs.NewServerType()
 	serverType.SetString(downtimeInput.Source)
 	if (serverType == server_structs.OriginType || serverType == server_structs.CacheType) && !config.ValidateServerType([]server_structs.ServerType{server_structs.RegistryType}) {
-		metadata, err := server_utils.GetServerMetadata(ctx, serverType)
+		metadata, err := server_utils.GetServerMetadata(ctx.Request.Context(), serverType)
 		if err != nil {
 			log.Debugf("Unable to get server metadata for %s: %v", serverType.String(), err)
 		}
@@ -561,7 +561,7 @@ func HandleDeleteDowntime(ctx *gin.Context) {
 // the dashboard. The values are not sensitive: directors publish them at
 // /.well-known/pelican-configuration for anonymous client discovery.
 func HandleGetFederationInfo(ctx *gin.Context) {
-	fedInfo, err := config.GetFederation(ctx)
+	fedInfo, err := config.GetFederation(ctx.Request.Context())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{
 			Status: server_structs.RespFailed,

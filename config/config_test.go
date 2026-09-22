@@ -30,6 +30,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1186,8 +1187,7 @@ func TestDiscoverFederationImpl(t *testing.T) {
 			require.NoError(t, param.Server_ExternalWebUrl.Set(tc.extWebUrl))
 
 			// Run discovery
-			ctx := testConfigContext(t)
-			result, err := discoverFederationImpl(ctx)
+			result, err := discoverFederationImpl()
 			if tc.expectError {
 				require.Error(t, err)
 			} else {
@@ -1957,4 +1957,157 @@ func TestLotmanScopedFilesSizeDefaults(t *testing.T) {
 		assert.Equal(t, "2g", param.Cache_FilesNominalSize.GetString())
 		assert.Equal(t, "3g", param.Cache_FilesMaxSize.GetString())
 	})
+}
+
+// Discovery runs under no caller's context, so the deadline it derives for
+// itself is the only thing that can end a stalled attempt.
+// Transport.DialerTimeout, Transport.TLSHandshakeTimeout, and
+// Transport.ResponseHeaderTimeout each bound a phase of the request, but
+// the shared client has no Client.Timeout and the body read in
+// pelican_url.DiscoverFederation has no deadline of its own -- so an
+// endpoint that returns headers and then stalls would otherwise leave the
+// discovery goroutine, and the request it holds, alive for the life of the
+// process.
+func TestDiscoveryBudgetBoundsStalledResponseBody(t *testing.T) {
+	ResetConfig()
+	t.Cleanup(ResetConfig)
+
+	release := make(chan struct{})
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		// Never write a body.
+		<-release
+	}))
+	// Cleanups run LIFO, so release the handler before closing the server:
+	// httptest.Server.Close waits for outstanding requests to finish.
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+
+	require.NoError(t, param.ConfigBase.Set(t.TempDir()))
+	require.NoError(t, param.TLSSkipVerify.Set(true))
+	require.NoError(t, param.Federation_DiscoveryUrl.Set(srv.URL))
+	// Shrink the per-attempt ceilings the budget is derived from, so
+	// this test takes seconds rather than the ~136s the defaults would
+	// allow.  Do not call GetClient() before this point: the transport
+	// is built once and would capture the old values.
+	require.NoError(t, param.Transport_DialerTimeout.Set(200*time.Millisecond))
+	require.NoError(t, param.Transport_TLSHandshakeTimeout.Set(200*time.Millisecond))
+	require.NoError(t, param.Transport_ResponseHeaderTimeout.Set(200*time.Millisecond))
+
+	ResetFederationForTest()
+
+	done := make(chan error, 1)
+	go func() {
+		// context.Background() so that only the discovery's own deadline
+		// can end this wait.
+		_, err := GetFederation(context.Background())
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.Error(t, err, "discovery should have been cut off by its own deadline")
+	case <-time.After(60 * time.Second):
+		t.Fatal("GetFederation never returned: the discovery budget is not bounding a stalled body")
+	}
+}
+
+// A caller's context bounds that caller's wait and nothing else.  The
+// discovery it was waiting on runs to completion, and that outcome -- not
+// the abandoning caller's cancellation -- is what gets memoized.  This is
+// what lets a handler pass its request context: a client that disconnects
+// mid-discovery can no longer decide the federation for every later caller.
+func TestCallerContextBoundsOnlyThatCaller(t *testing.T) {
+	ResetConfig()
+	t.Cleanup(ResetConfig)
+
+	metadata, err := json.Marshal(pelican_url.FederationDiscovery{
+		DiscoveryEndpoint: "https://fake-discovery.com",
+		DirectorEndpoint:  "https://fake-director.com",
+		RegistryEndpoint:  "https://fake-registry.com",
+		BrokerEndpoint:    "https://fake-broker.com",
+		JwksUri:           "https://fake-discovery/.well-known/issuer.jwks",
+	})
+	require.NoError(t, err)
+
+	var startedOnce, releaseOnce sync.Once
+	started := make(chan struct{})
+	release := make(chan struct{})
+	releaseServer := func() { releaseOnce.Do(func() { close(release) }) }
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startedOnce.Do(func() { close(started) })
+		// Hold the request open until the abandoning caller has given up.
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(metadata)
+	}))
+	// Cleanups run LIFO, so release the handler before closing the server:
+	// httptest.Server.Close waits for outstanding requests to finish.
+	t.Cleanup(srv.Close)
+	t.Cleanup(releaseServer)
+
+	require.NoError(t, param.ConfigBase.Set(t.TempDir()))
+	require.NoError(t, param.TLSSkipVerify.Set(true))
+	require.NoError(t, param.Federation_DiscoveryUrl.Set(srv.URL))
+
+	ResetFederationForTest()
+
+	abandonCtx, abandon := context.WithCancel(context.Background())
+	t.Cleanup(abandon)
+	abandoned := make(chan error, 1)
+	go func() {
+		_, err := GetFederation(abandonCtx)
+		abandoned <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		t.Fatal("discovery never reached the mock federation root")
+	}
+	abandon()
+
+	select {
+	case err := <-abandoned:
+		require.Error(t, err, "the cancelled caller should have stopped waiting")
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(30 * time.Second):
+		t.Fatal("cancelling a caller's context did not release it")
+	}
+
+	// The discovery that caller abandoned is still in flight; let it finish.
+	releaseServer()
+
+	fedInfo, err := GetFederation(context.Background())
+	require.NoError(t, err, "an abandoned caller's cancellation was memoized as the federation")
+	assert.Equal(t, "https://fake-director.com", fedInfo.DirectorEndpoint)
+	assert.Equal(t, "https://fake-registry.com", fedInfo.RegistryEndpoint)
+}
+
+// Once discovery has finished, its result is a memoized read: a caller whose
+// context is already done still gets it.  Failing such a caller would be
+// gratuitous -- there is nothing left to wait for -- and every handler in a
+// serving process is this caller, since InitServer resolves discovery before
+// the engine serves.
+func TestFinishedDiscoveryAnswersACancelledCaller(t *testing.T) {
+	ResetConfig()
+	t.Cleanup(ResetConfig)
+
+	require.NoError(t, param.ConfigBase.Set(t.TempDir()))
+	mockFederationRoot(t)
+	ResetFederationForTest()
+
+	fedInfo, err := GetFederation(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "https://fake-director.com", fedInfo.DirectorEndpoint)
+
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cancelledInfo, err := GetFederation(cancelledCtx)
+	require.NoError(t, err, "a finished discovery should still answer a caller whose context is done")
+	assert.Equal(t, fedInfo, cancelledInfo)
 }
