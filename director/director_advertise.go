@@ -201,7 +201,7 @@ func registerDirectorAd(appCtx context.Context, egrp *errgroup.Group, ctx *gin.C
 			func() {
 				directorAdMutex.Lock()
 				defer directorAdMutex.Unlock()
-				updateInternalDirectorCache(ctx, egrp, directorAd)
+				updateInternalDirectorCache(appCtx, egrp, directorAd)
 			}()
 		}
 	} else if fAd.AdType == server_structs.CacheType.String() || fAd.AdType == server_structs.OriginType.String() {
