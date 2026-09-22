@@ -114,7 +114,7 @@ func retrieveRequest(ctx context.Context, ginCtx *gin.Context) {
 		return
 	}
 
-	req, err := handleRetrieve(ctx, ginCtx, originReq.Origin, timeoutVal)
+	req, err := handleRetrieve(ctx, ginCtx.Request.Context(), originReq.Origin, timeoutVal)
 	if errors.Is(err, errRetrieveTimeout) {
 		ginCtx.JSON(http.StatusOK, newBrokerRespTimeout())
 		return
