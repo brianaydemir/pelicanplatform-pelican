@@ -113,7 +113,7 @@ func handleExports(ctx *gin.Context) {
 	// Create token for accessing registry edit page. A standalone origin has no
 	// registry, hence no edit URLs to decorate and no audience to mint against.
 	if !standalone {
-		token, err := MintRegistrationEditToken(ctx)
+		token, err := MintRegistrationEditToken(ctx.Request.Context())
 		if err != nil {
 			log.Errorf("Failed to create access token for editing registration %v", err)
 			ctx.JSON(http.StatusInternalServerError, server_structs.SimpleApiResp{Status: server_structs.RespFailed, Msg: "Server encountered error when creating token for access registry edit page " + err.Error()})

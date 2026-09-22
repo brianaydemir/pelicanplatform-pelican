@@ -100,7 +100,7 @@ func federationDiscoveryHandler(ctx *gin.Context) {
 		return
 	}
 
-	fedInfo, err := config.GetFederation(ctx)
+	fedInfo, err := config.GetFederation(ctx.Request.Context())
 	if err != nil {
 		log.Errorln("Bad server configuration: Federation discovery could not resolve:", err)
 		ctx.JSON(http.StatusInternalServerError,

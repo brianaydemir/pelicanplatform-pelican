@@ -239,6 +239,7 @@ func TestCreateFedTok(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest("GET", "/", nil)
 
 			confDir := t.TempDir()
 			kDir := filepath.Join(confDir, "keys")
@@ -256,7 +257,7 @@ func TestCreateFedTok(t *testing.T) {
 				BrokerEndpoint:    "https://dne-broker.com",
 			}
 			config.SetFederation(fed)
-			err := initServerForTest(t, c, server_structs.RegistryType) // Helps us populate the keys directory with a signing key
+			err := initServerForTest(t, c.Request.Context(), server_structs.RegistryType) // Helps us populate the keys directory with a signing key
 			require.NoError(t, err)
 
 			allowedPrefixesForCaches.Store(&tc.allowedPrefixes)

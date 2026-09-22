@@ -113,7 +113,7 @@ func resolveRegisteredServerJWKS(ctx *gin.Context, serverID string) (jwk.Set, bo
 func (a AuthCheckImpl) checkFederationIssuer(c *gin.Context, strToken string, expectedScopes []token_scopes.TokenScope, allScopes bool) error {
 	dirFallback := false
 
-	fedInfo, err := config.GetFederation(c)
+	fedInfo, err := config.GetFederation(c.Request.Context())
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (a AuthCheckImpl) checkRegisteredServer(ctx *gin.Context, strToken string, 
 	}
 
 	// Resolve the registry URL to derive the expected audience before verification.
-	federationInfo, err := config.GetFederation(context.Background())
+	federationInfo, err := config.GetFederation(ctx.Request.Context())
 	if err != nil {
 		return errors.Wrap(err, "failed to get federation information")
 	}
