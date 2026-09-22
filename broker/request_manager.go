@@ -97,7 +97,10 @@ func handleRequest(ctx context.Context, origin string, req reversalRequest, time
 }
 
 // Handle the origin's request to retrieve any pending reversals.
-func handleRetrieve(appCtx context.Context, ginCtx context.Context, origin string, timeout time.Duration) (req reversalRequest, err error) {
+//
+// reqCtx is the HTTP request's context, so the long poll ends when the
+// origin hangs up.
+func handleRetrieve(appCtx context.Context, reqCtx context.Context, origin string, timeout time.Duration) (req reversalRequest, err error) {
 	// Return randomly short of the timeout.
 	maxTime := timeout - 500*time.Millisecond - time.Duration(rand.Intn(500))*time.Millisecond
 	if maxTime <= 0 {
@@ -110,7 +113,7 @@ func handleRetrieve(appCtx context.Context, ginCtx context.Context, origin strin
 		break
 	case <-tick.C:
 		err = errRetrieveTimeout
-	case <-ginCtx.Done():
+	case <-reqCtx.Done():
 		err = errRetrieveTimeout
 	case <-appCtx.Done():
 		err = errRetrieveTimeout
