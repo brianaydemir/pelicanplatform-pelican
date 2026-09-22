@@ -1160,6 +1160,64 @@ func TestCrossNamespaceRevocationBlocked(t *testing.T) {
 	assert.NoError(t, err, "alpha's refresh token must not be revoked by beta's revocation call")
 }
 
+// --- Device code denial must not fail open ---
+
+// The deny branch of handleDeviceVerifySubmit moved from the gin context
+// to the request context, which made its write cancellable by a client
+// disconnect for the first time.  A deny that does not land leaves the
+// row "pending", so the device keeps polling successfully until the code
+// expires -- while the user has been told the request was denied.
+
+func TestDeviceDenyPersistsAfterClientDisconnect(t *testing.T) {
+	storage := createTestDB(t)
+	client := newTestClient(t, storage, "device-client-disconnect")
+	req := newTestRequest(client, "")
+
+	require.NoError(t, storage.CreateDeviceCodeSession(context.Background(),
+		"dc-disconnect", "DISC-CODE", req, time.Now().Add(10*time.Minute)))
+
+	provider := &OIDCProvider{storage: storage, Namespace: "/test/ns"}
+
+	// The browser hung up before the handler ran: the request context is
+	// already cancelled.
+	reqCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	c, w := secNewDenyRequest(reqCtx, "DISC-CODE")
+	handleDeviceVerifySubmit(provider)(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	session := &WLCGSession{
+		IDTokenClaimsField: &jwt.IDTokenClaims{Extra: map[string]interface{}{}},
+		JWTHeaders:         &jwt.Headers{},
+	}
+	_, err := storage.GetDeviceCodeSession(context.Background(), "dc-disconnect", session)
+	assert.ErrorIs(t, err, fosite.ErrAccessDenied,
+		"a denial the user committed to must survive the browser going away")
+}
+
+func TestDeviceDenyReportsStorageFailure(t *testing.T) {
+	storage := createTestDB(t)
+	provider := &OIDCProvider{storage: storage, Namespace: "/test/ns"}
+
+	// Break the database so the deny write cannot land.  createTestDB
+	// already closes this handle in t.Cleanup; closing twice is a no-op.
+	sqlDB, err := storage.db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+
+	c, w := secNewDenyRequest(context.Background(), "DEAD-CODE")
+	handleDeviceVerifySubmit(provider)(c)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code,
+		"a deny that could not be written must not be reported as success")
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "error", resp["status"])
+}
+
 // ---- Helpers ----
 
 // secBcryptHash bcrypt-hashes a secret string using minimum cost for faster tests.
@@ -1209,4 +1267,29 @@ func secParseJWT(t *testing.T, provider *OIDCProvider, token string) jwtpkg.Toke
 		jwtpkg.WithValidate(false))
 	require.NoError(t, err)
 	return parsed
+}
+
+// secNewDenyRequest builds a gin context for a POST that denies userCode
+// at the device verification endpoint.  reqCtx becomes the request's
+// context, so passing a cancelled one stands in for a browser that hung
+// up mid-submit.
+func secNewDenyRequest(reqCtx context.Context, userCode string) (*gin.Context, *httptest.ResponseRecorder) {
+	const csrfToken = "test-csrf-token"
+
+	form := url.Values{
+		"user_code":  {userCode},
+		"action":     {"deny"},
+		"csrf_token": {csrfToken},
+	}
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/v1.0/issuer/ns/test/ns/device", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: csrfToken})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req.WithContext(reqCtx)
+	// Stand in for the auth middleware, which runs before this handler.
+	c.Set("User", "test-user")
+	return c, w
 }
