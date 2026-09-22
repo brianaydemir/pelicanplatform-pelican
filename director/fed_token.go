@@ -87,7 +87,7 @@ func validateFedTokRequest(ginCtx *gin.Context) (rInfo requestInfo, err error) {
 func createFedTok(ginCtx *gin.Context, rInfo requestInfo) (tok string, err error) {
 	// The federation token will be signed by the Director on behalf of the federation, so
 	// we still use the Discovery endpoint as the issuer.
-	fed, err := config.GetFederation(ginCtx)
+	fed, err := config.GetFederation(ginCtx.Request.Context())
 	if err != nil {
 		err = errors.Wrap(err, "federation issuer could not be determined")
 		return
@@ -168,7 +168,7 @@ func getFedToken(ginCtx *gin.Context) {
 	}
 	// Any token that grants authorization to advertise within a federation should be enough
 	// to determine that the server is part of the federation.
-	if ok, err := verifyAdvertiseToken(ginCtx, rInfo.Tok, registryPrefix); err != nil {
+	if ok, err := verifyAdvertiseToken(ginCtx.Request.Context(), rInfo.Tok, registryPrefix); err != nil {
 		if errors.Is(err, adminApprovalErr) {
 			log.Debugf("Host '%s' has not been approved by an administrator", rInfo.Host)
 			ginCtx.JSON(http.StatusForbidden, server_structs.SimpleApiResp{

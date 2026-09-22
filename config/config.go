@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -32,7 +33,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/log/term"
@@ -400,21 +400,17 @@ var (
 	preCleanupMu    sync.Mutex
 	preCleanupFuncs map[string]func()
 
-	// Global discovery info.  Using the "once" allows us to delay discovery
-	// until it's first needed, avoiding a web lookup for invoking configuration
-	// Note the 'once' object is a pointer so we can reset the client multiple
-	// times during unit tests.
+	// Global discovery info.  Discovery is delayed until it is first
+	// needed, avoiding a web lookup for invoking configuration.
 	//
-	// fedDiscoveryMu guards the fedDiscoveryOnce pointer itself: Init{Client,Server}
-	// (and the test reset helpers) reassign it while background goroutines may be
+	// fedDiscoveryMu guards the fedDiscoveryCur pointer itself: Init{Client,Server}
+	// (and the test reset helpers) clear it while background goroutines may be
 	// concurrently reading it via GetFederation, e.g. during LaunchModules where
 	// the director starts querying federation info before the local cache module
-	// re-initializes the client.  Always go through resetFedDiscoveryOnce /
-	// loadFedDiscoveryOnce rather than touching fedDiscoveryOnce directly.
-	fedDiscoveryMu   sync.Mutex
-	fedDiscoveryOnce *sync.Once
-	globalFedInfo    atomic.Pointer[pelican_url.FederationDiscovery]
-	globalFedErr     error
+	// re-initializes the client.  Always go through startFedDiscovery /
+	// resetFedDiscovery rather than touching fedDiscoveryCur directly.
+	fedDiscoveryMu  sync.Mutex
+	fedDiscoveryCur *fedDiscoveryRun
 
 	// Global struct validator
 	validate *validator.Validate
@@ -719,11 +715,74 @@ func validateDiscoveryUrl(discUrlStr string) (*url.URL, error) {
 	return discUrl, nil
 }
 
+// fedDiscoveryTimeout bounds one discovery run end to end.  The shared
+// client has no Client.Timeout, the transport timeouts bound only the
+// phases of a single attempt, and the body read in
+// pelican_url.DiscoverFederation has no deadline at all, so without this
+// an endpoint that returns headers and then stalls would hold the
+// discovery goroutine, and the request it holds, for the life of the
+// process.
+//
+// It is generous on purpose.  A premature DeadlineExceeded is memoized
+// like any other failure, so it must cover the whole retry sequence in
+// DiscoverFederation: three attempts, each bounded by the transport's
+// dial, TLS handshake, and response-header timeouts, with a pause after
+// each one that times out.  Oversizing it costs nobody any latency,
+// because callers bound their own wait with their own contexts.
+//
+// A variable rather than a constant so that tests can shrink it.
+var fedDiscoveryTimeout = 3 * time.Minute
+
+// fedDiscoveryInputs is everything one discovery run reads from the
+// process configuration.  It is captured on the goroutine that starts
+// the run, and the run reads nothing else afterwards: a reset may drop a
+// run at any point, and whoever resets goes on to rewrite the
+// configuration -- ResetConfig in a test cleanup, for one -- so a run
+// that kept reading it would race with them.
+type fedDiscoveryInputs struct {
+	discoveryUrl   string // Federation.DiscoveryUrl
+	externalWebUrl string // Server.ExternalWebUrl
+	directorUrl    string // Federation.DirectorUrl
+	registryUrl    string // Federation.RegistryUrl
+	jwksUrl        string // Federation.JwkUrl
+	brokerUrl      string // Federation.BrokerUrl
+
+	standaloneOrigin bool
+	enabled          server_structs.ServerType
+
+	httpClient *http.Client
+	userAgent  string
+	timeout    time.Duration
+}
+
+func gatherFedDiscoveryInputs() fedDiscoveryInputs {
+	return fedDiscoveryInputs{
+		discoveryUrl:     param.Federation_DiscoveryUrl.GetString(),
+		externalWebUrl:   param.Server_ExternalWebUrl.GetString(),
+		directorUrl:      viper.GetString("Federation.DirectorUrl"),
+		registryUrl:      viper.GetString("Federation.RegistryUrl"),
+		jwksUrl:          viper.GetString("Federation.JwkUrl"),
+		brokerUrl:        viper.GetString("Federation.BrokerUrl"),
+		standaloneOrigin: IsStandaloneOrigin(),
+		enabled:          enabledServers,
+		httpClient:       GetClient(),
+		// We can't really know the service here, so set to generic Pelican
+		userAgent: "pelican/" + GetVersion(),
+		timeout:   fedDiscoveryTimeout,
+	}
+}
+
 // Global implementation of Discover Federation, outside any caching or
 // delayed discovery
-func discoverFederationImpl(ctx context.Context) (fedInfo pelican_url.FederationDiscovery, err error) {
-	federationStr := param.Federation_DiscoveryUrl.GetString()
-	externalUrlStr := param.Server_ExternalWebUrl.GetString()
+func discoverFederationImpl() (pelican_url.FederationDiscovery, error) {
+	return gatherFedDiscoveryInputs().discover()
+}
+
+// discover runs federation discovery from the captured inputs.  It reads
+// no process configuration; see fedDiscoveryInputs.
+func (in fedDiscoveryInputs) discover() (fedInfo pelican_url.FederationDiscovery, err error) {
+	federationStr := in.discoveryUrl
+	externalUrlStr := in.externalWebUrl
 
 	// A standalone origin has no federation to discover, but a populated
 	// discovery endpoint is still required below -- it doubles as the federation
@@ -732,33 +791,33 @@ func discoverFederationImpl(ctx context.Context) (fedInfo pelican_url.Federation
 	// broker endpoints empty.  This is resolved here rather than at InitServer
 	// time because Server.ExternalWebUrl is not final until the web engine has
 	// bound its port (Server.WebPort may be 0).
-	if federationStr == "" && IsStandaloneOrigin() {
+	if federationStr == "" && in.standaloneOrigin {
 		log.Debugln("Origin is standalone; using its own external web URL as the federation discovery URL")
 		federationStr = externalUrlStr
 	}
 
 	defer func() {
 		// Set default guesses if these values are still unset.
-		if fedInfo.DirectorEndpoint == "" && enabledServers.IsEnabled(server_structs.DirectorType) {
+		if fedInfo.DirectorEndpoint == "" && in.enabled.IsEnabled(server_structs.DirectorType) {
 			fedInfo.DirectorEndpoint = externalUrlStr
 		}
-		if fedInfo.RegistryEndpoint == "" && enabledServers.IsEnabled(server_structs.RegistryType) {
+		if fedInfo.RegistryEndpoint == "" && in.enabled.IsEnabled(server_structs.RegistryType) {
 			fedInfo.RegistryEndpoint = externalUrlStr
 		}
-		if fedInfo.JwksUri == "" && enabledServers.IsEnabled(server_structs.DirectorType) {
+		if fedInfo.JwksUri == "" && in.enabled.IsEnabled(server_structs.DirectorType) {
 			fedInfo.JwksUri = externalUrlStr + "/.well-known/issuer.jwks"
 		}
-		if fedInfo.BrokerEndpoint == "" && enabledServers.IsEnabled(server_structs.BrokerType) {
+		if fedInfo.BrokerEndpoint == "" && in.enabled.IsEnabled(server_structs.BrokerType) {
 			fedInfo.BrokerEndpoint = externalUrlStr
 		}
-		if fedInfo.DirectorAdvertiseEndpoints == nil && enabledServers.IsEnabled(server_structs.DirectorType) {
+		if fedInfo.DirectorAdvertiseEndpoints == nil && in.enabled.IsEnabled(server_structs.DirectorType) {
 			fedInfo.DirectorAdvertiseEndpoints = []string{externalUrlStr}
 		}
 
 		// Some services in the Director, like federation tokens, may require a defined federation root (discovery URL)
 		// so for these to have a chance at working in places where a Director truly is acting as the fed root (e.g.
 		// fed-in-box unit tests), we need to set the discovery endpoint to the director endpoint.
-		if fedInfo.DiscoveryEndpoint == "" && enabledServers.IsEnabled(server_structs.DirectorType) {
+		if fedInfo.DiscoveryEndpoint == "" && in.enabled.IsEnabled(server_structs.DirectorType) {
 			fedInfo.DiscoveryEndpoint = fedInfo.DirectorEndpoint
 		}
 
@@ -786,10 +845,10 @@ func discoverFederationImpl(ctx context.Context) (fedInfo pelican_url.Federation
 	// Set each of the fed values to anything we got from config.
 	log.Debugln("Configured federation URL:", federationStr)
 	fedInfo.DiscoveryEndpoint = federationStr
-	fedInfo.DirectorEndpoint = viper.GetString("Federation.DirectorUrl")
-	fedInfo.RegistryEndpoint = viper.GetString("Federation.RegistryUrl")
-	fedInfo.JwksUri = viper.GetString("Federation.JwkUrl")
-	fedInfo.BrokerEndpoint = viper.GetString("Federation.BrokerUrl")
+	fedInfo.DirectorEndpoint = in.directorUrl
+	fedInfo.RegistryEndpoint = in.registryUrl
+	fedInfo.JwksUri = in.jwksUrl
+	fedInfo.BrokerEndpoint = in.brokerUrl
 
 	// The only time we'll ever skip discovery is if we already have all the values.
 	// Note that the discovery endpoint itself is required because it acts as the
@@ -840,17 +899,27 @@ func discoverFederationImpl(ctx context.Context) (fedInfo pelican_url.Federation
 		log.Debugln("No federation discovery URL configured; skipping auto-discovery of services")
 	} else {
 		log.Debugln("Attempting to discover federation services via URL:", federationStr)
-		httpClient := GetClient()
-		if httpClient == nil {
+		if in.httpClient == nil {
 			err = errors.New("no HTTP client available to perform federation discovery")
 			return
 		}
 
-		// We can't really know the service here, so set to generic Pelican
-		ua := "pelican/" + GetVersion()
-		metadata, err = pelican_url.DiscoverFederation(ctx, httpClient, ua, federationUrl)
+		// Discovery runs under no caller's context, so this deadline is
+		// the only thing bounding it; see fedDiscoveryTimeout.
+		discCtx, cancel := context.WithTimeout(context.Background(), in.timeout)
+		defer cancel()
+
+		metadata, err = pelican_url.DiscoverFederation(discCtx, in.httpClient, in.userAgent, federationUrl)
 		if err != nil {
-			err = errors.Wrapf(err, "could not discover federation services from '%s'", federationUrl.String())
+			// Branch on the context rather than on the error chain to say
+			// the deadline fired: the transport's own timeouts do not all
+			// unwrap to context.DeadlineExceeded, and startMetadataQuery
+			// reports one as a connection failure.
+			if discCtx.Err() != nil {
+				err = errors.Wrapf(err, "federation discovery from '%s' did not finish within %s", federationUrl.String(), in.timeout)
+			} else {
+				err = errors.Wrapf(err, "could not discover federation services from '%s'", federationUrl.String())
+			}
 			return
 		}
 	}
@@ -883,33 +952,69 @@ func discoverFederationImpl(ctx context.Context) (fedInfo pelican_url.Federation
 	return
 }
 
-// resetFedDiscoveryOnce installs a fresh sync.Once so that the next
-// GetFederation re-runs (or re-consults) federation discovery.  It is safe to
-// call while other goroutines may be reading the Once through
-// loadFedDiscoveryOnce.
-func resetFedDiscoveryOnce() {
-	fedDiscoveryMu.Lock()
-	defer fedDiscoveryMu.Unlock()
-	fedDiscoveryOnce = &sync.Once{}
+// fedDiscoveryRun is one run of federation discovery together with the
+// outcome it memoizes.  info and err are written only before done is closed,
+// so a reader that has observed the close may read them without further
+// synchronization.
+//
+// A reset installs a new run rather than clearing this one's fields.  That
+// is what keeps a run still in flight from writing over the federation that
+// replaced it: it finishes into its own struct, which only the callers
+// already waiting on it can see.
+type fedDiscoveryRun struct {
+	done chan struct{}
+	info pelican_url.FederationDiscovery
+	err  error
 }
 
-// loadFedDiscoveryOnce returns the current federation-discovery Once, lazily
-// creating one if it has not been initialized yet.  Callers invoke Do on the
-// returned value outside the lock; if a concurrent reset swaps the global, the
-// caller simply operates on the prior Once, which is harmless.
-func loadFedDiscoveryOnce() *sync.Once {
+// startFedDiscovery returns the current federation-discovery run, starting
+// one if none is under way.
+//
+// Discovery runs on a goroutine of its own, under a deadline of its own and
+// under no caller's context.  Its outcome -- the error included -- is
+// memoized for the life of the process, so no one caller may decide it: a
+// request context reaching discovery would cache that single request's
+// cancellation as the federation for everybody.  Callers bound their own
+// wait instead; see GetFederation.
+//
+// The run's inputs are read here, on the caller's goroutine, and the run
+// reads no configuration after that; see fedDiscoveryInputs.
+//
+// The goroutine is deliberately not registered with the application
+// errgroup.  It is bounded by its own deadline, and that deadline is sized
+// to let a slow federation succeed -- waiting for it at shutdown is exactly
+// the multi-minute delay this arrangement exists to avoid.
+func startFedDiscovery() *fedDiscoveryRun {
 	fedDiscoveryMu.Lock()
 	defer fedDiscoveryMu.Unlock()
-	if fedDiscoveryOnce == nil {
-		fedDiscoveryOnce = &sync.Once{}
+	if fedDiscoveryCur != nil {
+		return fedDiscoveryCur
 	}
-	return fedDiscoveryOnce
+	in := gatherFedDiscoveryInputs()
+	run := &fedDiscoveryRun{done: make(chan struct{})}
+	fedDiscoveryCur = run
+	go func() {
+		defer close(run.done)
+		run.info, run.err = in.discover()
+	}()
+	return run
 }
 
-// Reset the fedDiscoveryOnce to update federation metadata values for GetFederation().
+// resetFedDiscovery drops the current run so that the next GetFederation
+// starts a fresh one.  A run already in flight is left to finish for
+// whoever is waiting on it; it simply stops being the answer anyone new
+// will get.
+func resetFedDiscovery() {
+	fedDiscoveryMu.Lock()
+	defer fedDiscoveryMu.Unlock()
+	fedDiscoveryCur = nil
+}
+
+// Drop the memoized federation metadata so that the next GetFederation
+// re-runs discovery.
 // Should only used for unit tests
 func ResetFederationForTest() {
-	resetFedDiscoveryOnce()
+	resetFedDiscovery()
 }
 
 // Retrieve the federation service information from the configuration.
@@ -918,17 +1023,31 @@ func ResetFederationForTest() {
 // long as this is invoked after `InitClient` / `InitServer`, it is thread-safe.
 // If invoked before things are configured, it must be done from a single-threaded
 // context.
+//
+// ctx bounds how long this caller waits for the shared result.  It does not
+// bound the discovery, and its cancellation is never memoized, so a handler
+// may pass its request context freely: a client that disconnects while
+// discovery is in flight fails that one request rather than caching
+// context.Canceled as the federation for the life of the process.
 func GetFederation(ctx context.Context) (pelican_url.FederationDiscovery, error) {
-	loadFedDiscoveryOnce().Do(func() {
-		var fedInfo pelican_url.FederationDiscovery
-		fedInfo, globalFedErr = discoverFederationImpl(ctx)
-		globalFedInfo.Store(&fedInfo)
-	})
-	loadedInfo := globalFedInfo.Load()
-	if loadedInfo == nil {
-		return pelican_url.FederationDiscovery{}, globalFedErr
+	run := startFedDiscovery()
+
+	// Answer from a finished run even when ctx is already done.  A caller
+	// whose deadline has passed still deserves a memoized result rather
+	// than an error, and select chooses at random between two ready cases.
+	select {
+	case <-run.done:
+		return run.info, run.err
+	default:
 	}
-	return *loadedInfo, globalFedErr
+
+	select {
+	case <-run.done:
+		return run.info, run.err
+	case <-ctx.Done():
+		return pelican_url.FederationDiscovery{}, errors.Wrap(ctx.Err(),
+			"stopped waiting for federation discovery")
+	}
 }
 
 // Set the current global federation metadata.
@@ -949,12 +1068,13 @@ func SetFederation(fd pelican_url.FederationDiscovery) {
 		log.WithError(err).Warn("Failed to update federation configuration")
 	}
 
-	globalFedInfo.Store(&fd)
-	globalFedErr = nil
-
-	// Consume the sync.Once so that subsequent GetFederation calls return the
-	// stored value directly instead of re-running discovery.
-	loadFedDiscoveryOnce().Do(func() {})
+	// Install the value as a finished run, so that subsequent GetFederation
+	// calls return it directly instead of running discovery.
+	done := make(chan struct{})
+	close(done)
+	fedDiscoveryMu.Lock()
+	defer fedDiscoveryMu.Unlock()
+	fedDiscoveryCur = &fedDiscoveryRun{done: done, info: fd}
 }
 
 // RegisterPreCleanup adds a named callback that will be invoked before
@@ -2821,7 +2941,7 @@ func InitServer(ctx context.Context, currentServers server_structs.ServerType) e
 
 	// Sets (or resets) the federation info. Unlike in clients, we do this at startup
 	// instead of deferring it.
-	resetFedDiscoveryOnce()
+	resetFedDiscovery()
 	if _, err := GetFederation(ctx); err != nil {
 		return err
 	}
@@ -2937,7 +3057,7 @@ func InitClient() error {
 	}
 
 	// Set (or reset) the deferred federation lookup
-	resetFedDiscoveryOnce()
+	resetFedDiscovery()
 
 	// Set up the log filter mechanisms, e.g., for sensitive secrets
 	initFilterLogging()
@@ -3006,9 +3126,7 @@ func ResetConfig() {
 	ResetJWKSFileCache()
 
 	// Reset federation metadata
-	resetFedDiscoveryOnce()
-	globalFedInfo.Store(&pelican_url.FederationDiscovery{})
-	globalFedErr = nil
+	resetFedDiscovery()
 
 	warnDeprecatedOnce = sync.Once{}
 	warnDebugOnce = sync.Once{}

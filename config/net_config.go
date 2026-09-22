@@ -75,7 +75,7 @@ func UpdateConfigFromListener(ln net.Listener) {
 						log.WithError(err).Warn("Failed to update Federation.BrokerUrl from listener")
 					}
 				}
-				resetFedDiscoveryOnce()
+				resetFedDiscovery()
 				log.Debugln("Random web port used; updated external web URL to", param.Server_ExternalWebUrl.GetString())
 			} else {
 				log.Errorln("Unable to update external web URL for random port; unable to parse existing URL:", serverUrlStr)
