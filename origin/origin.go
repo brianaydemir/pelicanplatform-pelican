@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	notificationChan = make(chan bool)
+	notificationChan = server_utils.NewDirectorNotifyChan()
 )
 
 // Configure API endpoints for origin that are not tied to UI

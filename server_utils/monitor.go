@@ -41,14 +41,23 @@ var (
 	directorTimeoutDuration = 30 * time.Second
 )
 
+// NewDirectorNotifyChan creates a new channel for reporting director test results
+func NewDirectorNotifyChan() chan bool {
+	// The buffer is what lets notifyNewDirectorResponse drop a
+	// notification instead of blocking a request handler: a queued
+	// notification resets the ticker just as well as a delivered one,
+	// so the only report dropped is one whose work another report is
+	// already about to do.
+	return make(chan bool, 1)
+}
+
 // Notify the periodic ticker for director-based health test timeout that we have received a new response and it
-// should reset
-func notifyNewDirectorResponse(ctx context.Context, nChan chan bool) {
+// should reset. nChan must come from NewDirectorNotifyChan: the send is
+// dropped rather than blocked, and the buffer is what makes dropping safe.
+func notifyNewDirectorResponse(nChan chan bool) {
 	select {
-	case <-ctx.Done():
-		return
 	case nChan <- true:
-		return
+	default: // A notification is already pending; it will reset the ticker.
 	}
 }
 
@@ -58,7 +67,8 @@ func directorTestEnabled() bool {
 }
 
 // Launch a go routine in errorgroup to report timeout if director-based health test
-// response was not sent within the defined time limit
+// response was not sent within the defined time limit. nChan must come from
+// NewDirectorNotifyChan.
 func LaunchPeriodicDirectorTimeout(ctx context.Context, egrp *errgroup.Group, nChan chan bool) {
 	if !directorTestEnabled() {
 		metrics.SetComponentHealthStatus(metrics.OriginCache_Director, metrics.StatusOK, "Director tests are disabled. No director tests expected.")
@@ -94,6 +104,8 @@ func LaunchPeriodicDirectorTimeout(ctx context.Context, egrp *errgroup.Group, nC
 // The director periodically uploads/downloads files to/from all online
 // origins for testing. It sends a request reporting the status of the test result to this endpoint,
 // and we will update origin internal health status metric by what director returns.
+// nChan must come from NewDirectorNotifyChan, and must be the same channel
+// passed to LaunchPeriodicDirectorTimeout.
 func HandleDirectorTestResponse(ctx *gin.Context, nChan chan bool) {
 
 	if !directorTestEnabled() {
@@ -129,7 +141,7 @@ func HandleDirectorTestResponse(ctx *gin.Context, nChan chan bool) {
 	}
 	updateTime := time.Unix(dt.Timestamp, 0)
 	// We will let the timer go timeout if director didn't send a valid json request
-	notifyNewDirectorResponse(ctx, nChan)
+	notifyNewDirectorResponse(nChan)
 	if dt.Status == "ok" {
 		metrics.SetComponentHealthStatus(metrics.OriginCache_Director, metrics.StatusOK, fmt.Sprintf("Director object transfer test succeeded at: %s", updateTime.Format("2006-01-02 15:04:05")))
 		ctx.JSON(http.StatusOK, server_structs.SimpleApiResp{
