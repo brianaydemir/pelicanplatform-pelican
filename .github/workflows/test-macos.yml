@@ -141,7 +141,7 @@ jobs:
             --hide-summary=output \
             --junitfile "$JUNIT_FILE" \
             -- \
-            -p=2 \
+            -p=4 \
             -timeout=${{ inputs.race_detection && '45m' || '30m' }} \
             ${{ inputs.race_detection && '-race' || '' }} \
             ${{ !inputs.race_detection && '-coverpkg=./...' || '' }} \

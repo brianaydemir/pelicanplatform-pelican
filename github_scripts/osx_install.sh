@@ -16,6 +16,8 @@
 
 set -ex
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 #
 # This script installs all the xrootd-related dependencies into the
 # Mac OS X instance in GitHub.
@@ -55,11 +57,14 @@ ninja install
 sudo ln -s "$PWD"/release_dir/lib/libSciTokens*.dylib /usr/local/lib
 popd
 
-# Build XRootD from source
-# Add patches to xrootd source code if needed
+# Build XRootD from source, applying the patches in patches/xrootd
 git clone https://github.com/PelicanPlatform/xrootd.git
 pushd xrootd
 git checkout v5.9.7-pelican
+for patch in "$SCRIPT_DIR"/patches/xrootd/*.patch; do
+  echo "Applying $(basename "$patch")"
+  git apply --verbose "$patch"
+done
 mkdir xrootd_build
 cd xrootd_build
 cmake .. -GNinja
