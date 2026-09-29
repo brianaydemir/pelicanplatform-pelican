@@ -118,6 +118,59 @@ jobs:
       - name: Install macOS dependencies
         run: ./github_scripts/osx_install.sh
 
+      # DIAGNOSTIC: Make "localhost" resolve only to 127.0.0.1, so that
+      # XRootD's re-resolution of its monitor destination always picks IPv4.
+      # Without the XrdNetAddr addrSize patch, every xrootd startup should
+      # then fail with EINVAL; with it, startups should succeed.
+      - name: Make localhost resolve to IPv4 only
+        run: |
+          echo "::group::/etc/hosts before"
+          cat /etc/hosts
+          echo "::endgroup::"
+          sudo sed -i '' -E '/^(::1|fe80::1%lo0)[[:space:]]+localhost/d' /etc/hosts
+          sudo dscacheutil -flushcache
+          sudo killall -HUP mDNSResponder
+          echo "::group::/etc/hosts after"
+          cat /etc/hosts
+          echo "::endgroup::"
+
+          # Mimic XRootD: reverse-resolve ::ffff:127.0.0.1, then resolve the
+          # name with XrdNetAddr's default hints and report the first result.
+          cat > "$RUNNER_TEMP/gai.c" <<'EOF'
+          #include <stdio.h>
+          #include <string.h>
+          #include <netdb.h>
+          #include <sys/socket.h>
+          #include <netinet/in.h>
+          #include <arpa/inet.h>
+          int main(void) {
+            struct sockaddr_in6 sa6;
+            char name[NI_MAXHOST];
+            memset(&sa6, 0, sizeof sa6);
+            sa6.sin6_family = AF_INET6;
+            sa6.sin6_len = sizeof sa6;
+            inet_pton(AF_INET6, "::ffff:127.0.0.1", &sa6.sin6_addr);
+            if (getnameinfo((struct sockaddr *)&sa6, sizeof sa6, name, sizeof name, 0, 0, 0)) {
+              printf("reverse lookup failed\n");
+              return 1;
+            }
+            printf("reverse: ::ffff:127.0.0.1 -> %s\n", name);
+            struct addrinfo hints, *res = 0;
+            memset(&hints, 0, sizeof hints);
+            hints.ai_family = AF_UNSPEC;
+            hints.ai_flags = AI_V4MAPPED | AI_CANONNAME;
+            if (getaddrinfo(name, 0, &hints, &res) || !res) {
+              printf("forward lookup failed\n");
+              return 1;
+            }
+            printf("forward: first result for %s is %s\n", name,
+                   res->ai_family == AF_INET ? "IPv4" : "IPv6");
+            return res->ai_family == AF_INET ? 0 : 2;
+          }
+          EOF
+          cc -o "$RUNNER_TEMP/gai" "$RUNNER_TEMP/gai.c"
+          "$RUNNER_TEMP/gai"
+
       - name: Run "go test"
         env:
           JUNIT_FILE: junit-${{ matrix.binary_name }}.xml
