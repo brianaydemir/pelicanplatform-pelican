@@ -118,16 +118,22 @@ jobs:
       - name: Install macOS dependencies
         run: ./github_scripts/osx_install.sh
 
-      # DIAGNOSTIC: Make "localhost" resolve only to 127.0.0.1, so that
-      # XRootD's re-resolution of its monitor destination always picks IPv4.
-      # Without the XrdNetAddr addrSize patch, every xrootd startup should
-      # then fail with EINVAL; with it, startups should succeed.
-      - name: Make localhost resolve to IPv4 only
+      # DIAGNOSTIC: Make 127.0.0.1 reverse-resolve to a name that has only an
+      # IPv4 address, so that XRootD's re-resolution of its monitor
+      # destination always picks IPv4. (Removing the IPv6 "localhost" entries
+      # from /etc/hosts does not work: macOS still returns IPv6 first for
+      # "localhost".) Without the XrdNetAddr addrSize patch, every xrootd
+      # startup should then fail with EINVAL; with it, startups should succeed.
+      - name: Make 127.0.0.1 reverse-resolve to an IPv4-only name
         run: |
           echo "::group::/etc/hosts before"
           cat /etc/hosts
           echo "::endgroup::"
-          sudo sed -i '' -E '/^(::1|fe80::1%lo0)[[:space:]]+localhost/d' /etc/hosts
+          awk '/^127\.0\.0\.1[[:space:]]+localhost/ && !done {
+                 print "127.0.0.1\tpelican-v4only"; done = 1
+               }
+               { print }' /etc/hosts > "$RUNNER_TEMP/hosts"
+          sudo cp "$RUNNER_TEMP/hosts" /etc/hosts
           sudo dscacheutil -flushcache
           sudo killall -HUP mDNSResponder
           echo "::group::/etc/hosts after"
@@ -135,7 +141,9 @@ jobs:
           echo "::endgroup::"
 
           # Mimic XRootD: reverse-resolve ::ffff:127.0.0.1, then resolve the
-          # name with XrdNetAddr's default hints and report the first result.
+          # name with XrdNetAddr's default hints. Print every result, and fail
+          # unless the first one is IPv4. Also show the results for any names
+          # given on the command line, for comparison.
           cat > "$RUNNER_TEMP/gai.c" <<'EOF'
           #include <stdio.h>
           #include <string.h>
@@ -143,7 +151,33 @@ jobs:
           #include <sys/socket.h>
           #include <netinet/in.h>
           #include <arpa/inet.h>
-          int main(void) {
+
+          static int dump(const char *name) {
+            struct addrinfo hints, *res = 0, *p;
+            int first = -1, i = 0;
+            memset(&hints, 0, sizeof hints);
+            hints.ai_family = AF_UNSPEC;
+            hints.ai_flags = AI_V4MAPPED | AI_CANONNAME;
+            int rc = getaddrinfo(name, 0, &hints, &res);
+            if (rc || !res) {
+              printf("forward: %s: %s\n", name, rc ? gai_strerror(rc) : "no results");
+              return -1;
+            }
+            first = res->ai_family;
+            for (p = res; p; p = p->ai_next, i++) {
+              char buf[INET6_ADDRSTRLEN];
+              const void *a = p->ai_family == AF_INET
+                ? (const void *)&((struct sockaddr_in *)p->ai_addr)->sin_addr
+                : (const void *)&((struct sockaddr_in6 *)p->ai_addr)->sin6_addr;
+              inet_ntop(p->ai_family, a, buf, sizeof buf);
+              printf("forward: %s [%d] %s %s (socktype %d)\n", name, i,
+                     p->ai_family == AF_INET ? "IPv4" : "IPv6", buf, p->ai_socktype);
+            }
+            freeaddrinfo(res);
+            return first;
+          }
+
+          int main(int argc, char **argv) {
             struct sockaddr_in6 sa6;
             char name[NI_MAXHOST];
             memset(&sa6, 0, sizeof sa6);
@@ -155,21 +189,18 @@ jobs:
               return 1;
             }
             printf("reverse: ::ffff:127.0.0.1 -> %s\n", name);
-            struct addrinfo hints, *res = 0;
-            memset(&hints, 0, sizeof hints);
-            hints.ai_family = AF_UNSPEC;
-            hints.ai_flags = AI_V4MAPPED | AI_CANONNAME;
-            if (getaddrinfo(name, 0, &hints, &res) || !res) {
-              printf("forward lookup failed\n");
-              return 1;
+            int first = dump(name);
+            for (int i = 1; i < argc; i++) dump(argv[i]);
+            if (first != AF_INET) {
+              printf("FAIL: first result for %s is not IPv4\n", name);
+              return 2;
             }
-            printf("forward: first result for %s is %s\n", name,
-                   res->ai_family == AF_INET ? "IPv4" : "IPv6");
-            return res->ai_family == AF_INET ? 0 : 2;
+            printf("OK: first result for %s is IPv4\n", name);
+            return 0;
           }
           EOF
           cc -o "$RUNNER_TEMP/gai" "$RUNNER_TEMP/gai.c"
-          "$RUNNER_TEMP/gai"
+          "$RUNNER_TEMP/gai" localhost pelican-v4only
 
       - name: Run "go test"
         env:
