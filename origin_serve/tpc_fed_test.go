@@ -403,8 +403,8 @@ func TestTPCCrossOrigin(t *testing.T) {
 	host := param.Server_Hostname.GetString()
 	port := strconv.Itoa(param.Server_WebPort.GetInt())
 
-	// Build the pelican binary for the second origin.
-	pelicanBinary := getPelicanBinary(t)
+	// Get the pelican-server binary for the second origin.
+	pelicanBinary := test_utils.GetPelicanServerBinary(t)
 
 	// Prepare directories and config for the second origin (source).
 	origin2Dir := t.TempDir()

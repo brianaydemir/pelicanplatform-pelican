@@ -68,7 +68,7 @@ type secondOrigin struct {
 func launchSecondOrigin(t testing.TB, ctx context.Context, host, user, password, storageType string) secondOrigin {
 	t.Helper()
 
-	pelicanBinary := getPelicanBinary(t)
+	pelicanBinary := test_utils.GetPelicanServerBinary(t)
 
 	origin2Dir := t.TempDir()
 	// When the tests run as root (as in CI), pelican launches xrootd as the
@@ -522,7 +522,7 @@ func runCrossOriginTPCE2E(t *testing.T, storageType string) {
 	// A distinct pelican.transfer token authenticates the CLI to the transfer server.
 	transferTokenFile := writeTokenFile(t, "transfer-token", generateTransferScopeToken(t))
 
-	cliPath := getPelicanBinary(t)
+	cliPath := test_utils.GetPelicanBinary(t)
 	cliEnv := append(os.Environ(),
 		"PELICAN_FEDERATION_DISCOVERYURL="+param.Federation_DiscoveryUrl.GetString(),
 		"PELICAN_TLSSKIPVERIFY=true",
