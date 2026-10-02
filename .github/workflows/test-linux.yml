@@ -165,6 +165,41 @@ jobs:
             fi
           done
 
+      - name: Run the end-to-end tests
+        # These take about a minute, mostly waiting on servers and the
+        # network, so run them alongside "go test" instead of after it.
+        # Run the scripts one at a time, so that at most one of their
+        # federations competes with "go test" for the runner, and run
+        # them all even after a failure, as when each was its own step.
+        # The time limit keeps a hung server from holding the job open.
+        if: ${{ !cancelled() && steps.goreleaser.outcome == 'success' }}
+        background: true
+        timeout-minutes: 5
+        run: |
+          cp "$TEST_PELICAN_BINARY" ./pelican
+          cp "$TEST_PELICAN_SERVER_BINARY" ./pelican-server
+
+          failed=()
+          for script in \
+            citests \
+            get_put_test \
+            stat_test \
+            version_test \
+            site_local_cache_test \
+            cache_availability_test
+          do
+            echo "::group::${script}.sh"
+            if ! "./github_scripts/${script}.sh"; then
+              echo "::error::${script}.sh failed"
+              failed+=("${script}.sh")
+            fi
+            echo "::endgroup::"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "Failed: ${failed[*]}"
+            exit 1
+          fi
+
       - name: Run "go test" (client)
         run: |
           # e2e_fed_tests and local_cache take longest, so start them first.
@@ -214,26 +249,6 @@ jobs:
         with:
           paths: junit-*.xml
 
-      - name: Copy the pelican binaries for the end-to-end tests
-        if: ${{ !cancelled() && steps.goreleaser.outcome == 'success' }}
-        run: |
-          cp "$TEST_PELICAN_BINARY" ./pelican
-          cp "$TEST_PELICAN_SERVER_BINARY" ./pelican-server
-      - name: Run integration tests
-        if: ${{ !cancelled() && steps.goreleaser.outcome == 'success' }}
-        run: ./github_scripts/citests.sh
-      - name: Run end-to-end test for object get/put
-        if: ${{ !cancelled() && steps.goreleaser.outcome == 'success' }}
-        run: ./github_scripts/get_put_test.sh
-      - name: Run end-to-end test for director stat
-        if: ${{ !cancelled() && steps.goreleaser.outcome == 'success' }}
-        run: ./github_scripts/stat_test.sh
-      - name: Run end-to-end test for --version flag
-        if: ${{ !cancelled() && steps.goreleaser.outcome == 'success' }}
-        run: ./github_scripts/version_test.sh
-      - name: Run end-to-end test for site-local cache standup
-        if: ${{ !cancelled() && steps.goreleaser.outcome == 'success' }}
-        run: ./github_scripts/site_local_cache_test.sh
-      - name: Run end-to-end test for Cache Availability/Stat weighting
-        if: ${{ !cancelled() && steps.goreleaser.outcome == 'success' }}
-        run: ./github_scripts/cache_availability_test.sh
+      # A failure in the background step above is reported here.
+      - name: Wait for the end-to-end tests
+        wait-all:
