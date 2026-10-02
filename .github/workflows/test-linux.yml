@@ -48,6 +48,10 @@ jobs:
       # to run the full test suite.
 
       - name: Free disk space
+        # This takes 1.5-2 minutes, but the tests come closest to filling
+        # the disk at the end of "go test", so let it run alongside the
+        # steps below.
+        background: true
         run: |
           echo "::group::Before"
           df -h
@@ -249,6 +253,6 @@ jobs:
         with:
           paths: junit-*.xml
 
-      # A failure in the background step above is reported here.
-      - name: Wait for the end-to-end tests
+      # A failure in the background steps above is reported here.
+      - name: Wait for the background steps
         wait-all:
