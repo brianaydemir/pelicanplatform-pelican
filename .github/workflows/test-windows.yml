@@ -53,9 +53,6 @@ jobs:
           # definitions, but '$GITHUB_WORKSPACE' in scripts.
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      # Unlike the Linux and macOS workflows, we do not need to set up
-      # Node.js, because we do not do a real build of the web UI on Windows.
-
       - name: Set Go version
         # Determine the string to use in setup-go's "go-version" input.
         id: go-version
@@ -86,9 +83,6 @@ jobs:
             # Ensure that GOPATH/bin is in PATH for subsequent steps.
             echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           fi
-
-      - name: Build web UI
-        run: make web-build
 
       - name: Generate GoReleaser config
         run: |
