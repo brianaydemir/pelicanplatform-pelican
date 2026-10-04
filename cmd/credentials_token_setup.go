@@ -23,6 +23,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -170,8 +171,17 @@ func credentialsTokenSetupMain(cmd *cobra.Command, args []string) error {
 		return errors.New("acquired token is empty")
 	}
 
+	// AcquireToken only logs a failure to save the credential file, so
+	// confirm that the token actually reached it.
+	entry, err := savedTokenEntry(credFilePath, opts.DiscoveryURL, dirResp.XPelNsHdr.Namespace, token)
+	if err != nil {
+		return err
+	}
+
 	fmt.Fprintf(os.Stderr, "Successfully set up credentials for %s\n", dirResp.XPelNsHdr.Namespace)
 	fmt.Fprintf(os.Stderr, "Credential file: %s\n", credFilePath)
+
+	warnIfNoRefreshToken(os.Stderr, dirResp.XPelNsHdr.Namespace, entry)
 	return nil
 }
 
@@ -186,6 +196,71 @@ func checkNoPasswordTarget(credFilePath string) error {
 	if protected {
 		return errors.Errorf("--no-password cannot be used with %s because it is password-protected; "+
 			"set PELICAN_CLIENT_CREDENTIALFILE to the path of a separate credential file", credFilePath)
+	}
+	return nil
+}
+
+// warnIfNoRefreshToken writes a warning to w if entry, the token saved for
+// prefix, has no refresh token.
+func warnIfNoRefreshToken(w io.Writer, prefix string, entry *config.TokenEntry) {
+	// The point of a credential file is to keep working without anyone
+	// approving access again, which needs a refresh token. The issuer may
+	// decline the offline_access scope, so check what was actually saved.
+	if entry.RefreshToken != "" {
+		return
+	}
+	fmt.Fprintf(w, "WARNING: No refresh token was saved for %s, so Pelican cannot renew access.\n", prefix)
+	if entry.Expiration > 0 {
+		fmt.Fprintf(w, "Anything using this credential file will stop working when the current token expires at %s.\n",
+			time.Unix(entry.Expiration, 0).Format(time.RFC1123))
+	} else {
+		fmt.Fprintln(w, "Anything using this credential file will stop working when the current token expires.")
+	}
+}
+
+// savedTokenEntry returns the token entry for prefix that was saved to the
+// configured credential file, or an error if none was saved. It reads
+// whichever file config.GetEncryptedConfigName names; credFilePath must be
+// that file's path and is used only in error messages.
+func savedTokenEntry(credFilePath, discoveryURL, prefix, accessToken string) (*config.TokenEntry, error) {
+	// AcquireToken also leaves the file alone when it mints the token from
+	// a local issuer key, and it doesn't say which happened. Such a host
+	// mints its own tokens on every run, so name both causes.
+	notSaved := errors.Errorf("the token for %s was not saved to %s; "+
+		"this host may issue its own tokens for %s and need no credential file, "+
+		"or the file could not be written (see any warning above)", prefix, credFilePath, prefix)
+
+	// Reading a missing credential file would create it and prompt for a
+	// new password, so check that the file exists first.
+	exists, err := config.EncryptedConfigExists()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to check whether %s exists", credFilePath)
+	}
+	if !exists {
+		return nil, notSaved
+	}
+	credConfig, err := config.GetCredentialConfigContents()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read %s", credFilePath)
+	}
+	entry := findSavedTokenEntry(&credConfig, discoveryURL, prefix, accessToken)
+	if entry == nil {
+		return nil, notSaved
+	}
+	return entry, nil
+}
+
+// findSavedTokenEntry returns the token entry saved for prefix whose access
+// token is accessToken, or nil if there is none.
+func findSavedTokenEntry(credConfig *config.CredentialConfig, discoveryURL, prefix, accessToken string) *config.TokenEntry {
+	fc, idx := credConfig.FindOauthClient(discoveryURL, prefix)
+	if idx < 0 {
+		return nil
+	}
+	for i := range fc.OauthClient[idx].Tokens {
+		if fc.OauthClient[idx].Tokens[i].AccessToken == accessToken {
+			return &fc.OauthClient[idx].Tokens[i]
+		}
 	}
 	return nil
 }
