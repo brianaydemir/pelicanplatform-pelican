@@ -23,6 +23,10 @@ package config
 var savedPassword bool = false
 var savedPasswordVal []byte = make([]byte, 0)
 
+// DisableKernelKeyringForTesting is a no-op because the password cache
+// already uses only in-process memory.
+func DisableKernelKeyringForTesting() {}
+
 // Returns the password stored in the session keyring, or an empty byte
 // array if it cannot be found. The keyring is provided by in-process memory
 // because we assume that the kernel key retention service is unavailable.

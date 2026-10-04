@@ -137,6 +137,11 @@ func credentialsTokenSetupMain(cmd *cobra.Command, args []string) error {
 	operation.Set(config.TokenRead)
 	operation.Set(config.TokenList)
 
+	credFilePath, err := config.GetEncryptedConfigName()
+	if err != nil {
+		return errors.Wrap(err, "failed to determine credential file path")
+	}
+
 	// Acquire a token (this will also register the OAuth2 client and save
 	// credentials to the credential file as a side effect).
 	//
@@ -144,6 +149,11 @@ func credentialsTokenSetupMain(cmd *cobra.Command, args []string) error {
 	// password prompts *before* token acquisition so the credential file
 	// is saved unencrypted on the write.
 	if tokenSetupNoPassword {
+		// Refuse up front, before the user approves access in a browser,
+		// rather than strip the password from an existing protected file.
+		if err := checkNoPasswordTarget(credFilePath); err != nil {
+			return err
+		}
 		config.SetEmptyPassword()
 	}
 
@@ -160,12 +170,22 @@ func credentialsTokenSetupMain(cmd *cobra.Command, args []string) error {
 		return errors.New("acquired token is empty")
 	}
 
-	credFilePath, err := config.GetEncryptedConfigName()
-	if err != nil {
-		return errors.Wrap(err, "failed to determine credential file path")
-	}
-
 	fmt.Fprintf(os.Stderr, "Successfully set up credentials for %s\n", dirResp.XPelNsHdr.Namespace)
 	fmt.Fprintf(os.Stderr, "Credential file: %s\n", credFilePath)
+	return nil
+}
+
+// checkNoPasswordTarget returns an error if the credential file at
+// credFilePath is password-protected, since --no-password cannot be used
+// with it.
+func checkNoPasswordTarget(credFilePath string) error {
+	protected, err := config.HasEncryptedPassword()
+	if err != nil {
+		return errors.Wrapf(err, "failed to check whether %s is password-protected", credFilePath)
+	}
+	if protected {
+		return errors.Errorf("--no-password cannot be used with %s because it is password-protected; "+
+			"set PELICAN_CLIENT_CREDENTIALFILE to the path of a separate credential file", credFilePath)
+	}
 	return nil
 }

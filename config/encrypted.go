@@ -45,29 +45,47 @@ import (
 	"github.com/pelicanplatform/pelican/param"
 )
 
-// If we prompted the user for a new password while setting up the file,
-// this global flag will be set to true.  This prevents us from asking for
-// the password again later.  It is atomic because credential reads/writes now
+// When set, credential saves skip the password prompt and store the
+// credential file unencrypted. It is set by --no-password, by
+// PELICAN_CLIENT_NOPASSWORD, after the user gives an empty password for a
+// new file, or after reading an unprotected file. It never strips the
+// password from a file that is already protected, and it does not apply
+// to reset-password. It is atomic because credential reads/writes now
 // happen concurrently (e.g. a transfer resolving a token while a background
 // refresh runs).
 var setEmptyPassword atomic.Bool
+
+// noPasswordFromEnv reports whether PELICAN_CLIENT_NOPASSWORD asks for
+// passwordless credential storage.
+func noPasswordFromEnv() bool {
+	v := os.Getenv("PELICAN_CLIENT_NOPASSWORD")
+	return v == "1" || v == "true"
+}
 
 func init() {
 	// Allow callers (such as test subprocesses) to opt into passwordless
 	// credential storage via the environment.  This avoids interactive
 	// password prompts when the process has no controlling terminal.
-	if v := os.Getenv("PELICAN_CLIENT_NOPASSWORD"); v == "1" || v == "true" {
-		log.Warning("PELICAN_CLIENT_NOPASSWORD is set: the credential wallet " +
-			"(including refresh tokens and OAuth client secrets) will be stored " +
+	if noPasswordFromEnv() {
+		log.Warning("PELICAN_CLIENT_NOPASSWORD is set: a new or unprotected credential " +
+			"wallet (including refresh tokens and OAuth client secrets) will be stored " +
 			"UNENCRYPTED on disk. Use only in non-interactive/test environments.")
 		setEmptyPassword.Store(true)
 	}
 }
 
+// resetEmptyPassword restores the empty-password flag to its startup value,
+// so that one test reading an unprotected file does not affect later ones.
+func resetEmptyPassword() {
+	setEmptyPassword.Store(noPasswordFromEnv())
+}
+
 // SetEmptyPassword instructs the encrypted config layer to skip password
 // prompts and store credentials without encryption.  Call this before any
 // operation that would trigger a credential save (e.g. AcquireToken) when
-// the user has opted for passwordless storage via --no-password.
+// the user has opted for passwordless storage via --no-password.  It does
+// not apply to a credential file that is already password-protected; saves
+// to such a file keep its password.
 func SetEmptyPassword() {
 	setEmptyPassword.Store(true)
 }
@@ -412,8 +430,24 @@ func marshalEncryptedConfig(config *CredentialConfig, password []byte) ([]byte, 
 }
 
 func saveConfigContents(config *CredentialConfig, forcePassword bool) error {
+	// Resetting the password must always prompt, even for an unprotected
+	// file; otherwise there is no way to add a password to it.
+	emptyPassword := setEmptyPassword.Load() && !forcePassword
+	if emptyPassword {
+		// Never silently strip the password from a protected file; doing
+		// so would expose every secret already in it.
+		protected, err := HasEncryptedPassword()
+		if err != nil {
+			return err
+		}
+		emptyPassword = !protected
+	}
+
 	password, err := TryGetPassword()
-	if setEmptyPassword.Load() {
+	if emptyPassword {
+		// An explicitly empty password must win over one cached in the
+		// session keyring; otherwise the file is silently saved encrypted.
+		password = nil
 		fmt.Fprintln(os.Stderr, "WARNING: empty password provided; the credentials will be saved unencrypted on disk")
 	} else if forcePassword || len(password) == 0 || err != nil {
 		var exists bool

@@ -198,6 +198,26 @@ func TestHasEncryptedPassword(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, hasPassword)
 	})
+
+	t.Run("encrypted-file-returns-true", func(t *testing.T) {
+		ResetConfig()
+		t.Cleanup(func() {
+			ResetConfig()
+		})
+
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "encrypted.pem")
+
+		pemBytes, err := marshalEncryptedConfig(nil, []byte("secret"))
+		require.NoError(t, err)
+		require.NoError(t, saveToFile(pemBytes, filePath))
+
+		require.NoError(t, param.Client_CredentialFile.Set(filePath))
+
+		hasPassword, err := HasEncryptedPassword()
+		require.NoError(t, err)
+		assert.True(t, hasPassword)
+	})
 }
 
 func TestGetEncryptedConfigNameOverride(t *testing.T) {

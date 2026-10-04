@@ -30,6 +30,10 @@ import (
 	"github.com/pelicanplatform/pelican/param"
 )
 
+func init() {
+	DisableKernelKeyringForTesting()
+}
+
 func TestGetSecret(t *testing.T) {
 	ResetConfig()
 
@@ -172,4 +176,131 @@ func TestDecryptString(t *testing.T) {
 		assert.Equal(t, firstKeyID, keyIdUsedInEncryption)
 		assert.Equal(t, secret, decrypted)
 	})
+}
+
+// TestSaveConfigContentsEmptyPasswordIgnoresCachedPassword verifies that an
+// explicitly empty password (e.g., `credentials token setup --no-password`)
+// wins over a password cached in the session keyring. Otherwise the file is
+// silently saved encrypted, and an unattended job that later reads it fails
+// because it cannot prompt for the password.
+func TestSaveConfigContentsEmptyPasswordIgnoresCachedPassword(t *testing.T) {
+	forgetCachedPassword(t)
+	ResetConfig()
+	t.Cleanup(func() {
+		setEmptyPassword.Store(false)
+		ForgetPassword()
+		ResetConfig()
+	})
+
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "credentials.pem")
+	require.NoError(t, param.Client_CredentialFile.Set(filePath))
+	require.NoError(t, param.ConfigBase.Set(tmpDir))
+
+	require.NoError(t, SavePassword([]byte("cached-password")))
+	SetEmptyPassword()
+
+	cfg := CredentialConfig{
+		OSDF: FederationCredentials{
+			OauthClient: []PrefixEntry{{Prefix: "/foo"}},
+		},
+	}
+	require.NoError(t, SaveConfigContents(&cfg))
+
+	contents, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(contents), "-----BEGIN PRIVATE KEY-----")
+	assert.NotContains(t, string(contents), "ENCRYPTED PRIVATE KEY")
+
+	// With no password available, the file must still be readable.
+	setEmptyPassword.Store(false)
+	ForgetPassword()
+	readBack, err := GetCredentialConfigContents()
+	require.NoError(t, err)
+	require.Len(t, readBack.OSDF.OauthClient, 1)
+	assert.Equal(t, "/foo", readBack.OSDF.OauthClient[0].Prefix)
+}
+
+// TestSaveConfigContentsEmptyPasswordKeepsProtectedFileEncrypted verifies
+// that an explicitly empty password does not strip the password from an
+// existing protected file, which would expose every secret already in it.
+func TestSaveConfigContentsEmptyPasswordKeepsProtectedFileEncrypted(t *testing.T) {
+	forgetCachedPassword(t)
+	ResetConfig()
+	t.Cleanup(func() {
+		setEmptyPassword.Store(false)
+		ForgetPassword()
+		ResetConfig()
+	})
+
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "credentials.pem")
+	require.NoError(t, param.Client_CredentialFile.Set(filePath))
+	require.NoError(t, param.ConfigBase.Set(tmpDir))
+
+	pemBytes, err := marshalEncryptedConfig(&CredentialConfig{
+		OSDF: FederationCredentials{
+			OauthClient: []PrefixEntry{{Prefix: "/existing"}},
+		},
+	}, []byte("wallet-password"))
+	require.NoError(t, err)
+	require.NoError(t, saveToFile(pemBytes, filePath))
+
+	// Simulate a process that decrypted the file and cached the password.
+	require.NoError(t, SavePassword([]byte("wallet-password")))
+	SetEmptyPassword()
+
+	cfg, err := GetCredentialConfigContents()
+	require.NoError(t, err)
+	cfg.OSDF.OauthClient = append(cfg.OSDF.OauthClient, PrefixEntry{Prefix: "/new"})
+	require.NoError(t, SaveConfigContents(&cfg))
+
+	contents, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(contents), "-----BEGIN ENCRYPTED PRIVATE KEY-----")
+
+	readBack, err := GetCredentialConfigContents()
+	require.NoError(t, err)
+	require.Len(t, readBack.OSDF.OauthClient, 2)
+	assert.Equal(t, "/new", readBack.OSDF.OauthClient[1].Prefix)
+}
+
+// TestResetPasswordPromptsForUnprotectedFile verifies that reset-password
+// prompts for a new password even though reading an unprotected file sets
+// the empty-password flag; otherwise there is no way to add a password.
+func TestResetPasswordPromptsForUnprotectedFile(t *testing.T) {
+	forgetCachedPassword(t)
+	ResetConfig()
+	t.Cleanup(func() {
+		setEmptyPassword.Store(false)
+		ResetConfig()
+	})
+
+	// Make sure that the prompt fails rather than waits on a real terminal.
+	stdin := os.Stdin
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdin = r
+	t.Cleanup(func() {
+		os.Stdin = stdin
+		r.Close()
+		w.Close()
+	})
+
+	filePath := filepath.Join(t.TempDir(), "credentials.pem")
+	require.NoError(t, param.Client_CredentialFile.Set(filePath))
+	require.NoError(t, SaveConfigContentsToFile(&CredentialConfig{}, filePath, false))
+
+	err = ResetPassword()
+	assert.ErrorContains(t, err, "not connected to a terminal")
+
+	contents, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(contents), "-----BEGIN PRIVATE KEY-----")
+}
+
+// forgetCachedPassword clears the password cache before and after the test.
+func forgetCachedPassword(t *testing.T) {
+	ForgetPassword()
+	t.Cleanup(ForgetPassword)
 }

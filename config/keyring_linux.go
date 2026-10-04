@@ -22,17 +22,33 @@ package config
 
 import (
 	"github.com/jsipprell/keyctl"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
 var savedPassword bool = false
 var savedPasswordVal []byte = make([]byte, 0)
 
+// sessionKeyring returns the kernel session keyring. When it fails, the
+// functions below fall back to the in-memory cache.
+var sessionKeyring = keyctl.SessionKeyring
+
+// DisableKernelKeyringForTesting makes the password cache use only
+// in-process memory. Tests must call it before caching any password: the
+// session keyring is shared with the developer's own pelican processes,
+// and a fake password left there by an interrupted test run would break
+// them until it expires.
+func DisableKernelKeyringForTesting() {
+	sessionKeyring = func() (keyctl.Keyring, error) {
+		return nil, errors.New("kernel keyring disabled for testing")
+	}
+}
+
 // Returns the password stored in the session keyring, or an empty byte
 // array if it cannot be found. The keyring will be provided by in-process
 // memory if the kernel key retention service is unavailable.
 func TryGetPassword() ([]byte, error) {
-	keyring, err := keyctl.SessionKeyring()
+	keyring, err := sessionKeyring()
 	if err != nil {
 		// Do _not_ return this error because we do not require the
 		// kernel key retention service to be available. However, do
@@ -60,7 +76,7 @@ func TryGetPassword() ([]byte, error) {
 // Saves a password to the session keyring. The keyring will be provided by
 // in-process memory if the kernel key retention service is unavailable.
 func SavePassword(password []byte) error {
-	keyring, err := keyctl.SessionKeyring()
+	keyring, err := sessionKeyring()
 	if err != nil {
 		// Do _not_ return this error because we do not require the
 		// kernel key retention service to be available. However, do
@@ -94,7 +110,7 @@ func ForgetPassword() {
 	savedPasswordVal = make([]byte, 0)
 	savedPassword = false
 
-	keyring, err := keyctl.SessionKeyring()
+	keyring, err := sessionKeyring()
 	if err != nil {
 		log.Debugln("Failed to get kernel session keyring:", err)
 		return

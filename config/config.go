@@ -2978,6 +2978,7 @@ func ResetConfig() {
 	ResetIssuerPrivateKeys()
 
 	ResetClientInitialized()
+	resetEmptyPassword()
 
 	// Reset config source tracking
 	GetSourceTracker().Reset()
