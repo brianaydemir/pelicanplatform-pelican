@@ -29,6 +29,12 @@ import (
 	"github.com/pelicanplatform/pelican/param"
 )
 
+func init() {
+	// Otherwise config.ForgetPassword clears the developer's own cached
+	// password from the kernel session keyring.
+	config.DisableKernelKeyringForTesting()
+}
+
 func TestWalletSessionLockedByDefault(t *testing.T) {
 	w := NewWalletSession()
 	assert.False(t, w.IsOpen(), "a new wallet session should be locked")
