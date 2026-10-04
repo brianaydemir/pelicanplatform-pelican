@@ -1,0 +1,93 @@
+import { Callout } from '@/components/Callout'
+
+# Using Pelican in Scripts and Scheduled Jobs
+
+When you access protected data, Pelican normally asks for a password
+and has you approve access in a web browser. A script or scheduled job
+that runs unattended has no one around to do either. Instead,
+approve access once, by hand, and let the job reuse the saved credentials.
+
+## Step 1: Approve access once
+
+<Callout type="warning">
+The file holding these credentials is not password-protected.
+Anyone who can read it can access your data.
+Pelican makes it readable only by you; don't copy, share, or commit it.
+</Callout>
+
+Run this yourself, in a terminal, giving the location your job uses:
+
+```bash
+PELICAN_CLIENT_CREDENTIALFILE="$HOME/.config/pelican/unattended.pem" \
+  pelican credentials token setup --no-password --read \
+  pelican://federation.example.org/namespace/project
+```
+
+Set `PELICAN_CLIENT_CREDENTIALFILE` only for this command, as shown.
+If you export it in your terminal,
+everything you do there with Pelican uses this unprotected file.
+
+Open the URL that Pelican prints, log in, and approve the request.
+Your job can then use that location.
+The access you're actually granted may differ from what you asked for.
+If Pelican warns that it saved no refresh token, it can't renew your access,
+and the job stops working when that access expires.
+
+- **`--read`** asks for permission to download and list objects.
+- **Need to upload too?**
+  Use `--write` instead of `--read`;
+  it also asks for permission to upload, overwrite, and delete objects.
+- **More than one location?**
+  Repeat this step for each, with the same `PELICAN_CLIENT_CREDENTIALFILE`.
+
+## Step 2: Point your job at the file
+
+Set `PELICAN_CLIENT_CREDENTIALFILE` before running Pelican:
+
+```bash
+#!/bin/sh
+export PELICAN_CLIENT_CREDENTIALFILE="$HOME/.config/pelican/unattended.pem"
+pelican object sync pelican://federation.example.org/namespace/project/inputs ./inputs
+# Uploading needs --write in Step 1.
+pelican object sync ./outputs pelican://federation.example.org/namespace/project/outputs
+```
+
+`object sync` copies the contents of one directory into another,
+skipping objects that are already at the destination with the same size.
+To copy a single object, use `object get` or `object put` instead;
+`object put` won't replace an object that already exists.
+
+## Keeping it working
+
+Pelican renews your access automatically when it expires,
+as long as the job keeps running.
+If the job stops running for a while, the saved approval expires;
+how long that takes depends on the federation.
+Your job will then fail with:
+
+```
+This transfer requires authorization to complete and no token is available
+```
+
+To fix it, delete the credential file,
+then repeat Step 1 for each location your job uses.
+You'll also see this error if the job goes beyond what you were granted,
+such as using another namespace or uploading after a `--read` setup.
+
+If a run is interrupted, some objects may be missing or only partly copied.
+Run the job again: `object sync` copies what's missing
+and replaces any downloaded object whose size doesn't match its source.
+An object that changed without changing size isn't copied again.
+
+A partly uploaded object usually can't be replaced this way.
+The job still succeeds, but Pelican warns that it skipped the upload.
+If you see that warning, have the object removed, then run the job again.
+
+## See also
+
+- [`pelican credentials token setup`](/commands-reference/pelican/credentials/token/setup)
+  for all options
+- [`Client.CredentialFile`](/parameters#Client-CredentialFile)
+  for setting the file in a config file instead
+- [Working with Protected Data](/getting-data-with-pelican/auth)
+  for how Pelican handles access in general
