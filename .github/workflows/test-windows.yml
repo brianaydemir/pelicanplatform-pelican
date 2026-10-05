@@ -101,6 +101,7 @@ jobs:
             -p=4 \
             -timeout=${{ inputs.race_detection && '30m' || '15m' }} \
             ${{ inputs.race_detection && '-race' || '' }} \
+            ${{ !inputs.race_detection && '-short' || '' }} \
             -tags=client \
             ./local_cache \
             ./...

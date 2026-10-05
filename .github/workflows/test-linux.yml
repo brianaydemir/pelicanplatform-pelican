@@ -202,6 +202,7 @@ jobs:
             -p=4 \
             -timeout=${{ inputs.race_detection && '30m' || '15m' }} \
             ${{ inputs.race_detection && '-race' || '' }} \
+            ${{ !inputs.race_detection && '-short' || '' }} \
             -tags=client \
             ./e2e_fed_tests \
             ./local_cache \
@@ -223,6 +224,7 @@ jobs:
             -p=4 \
             -timeout=${{ inputs.race_detection && '30m' || '15m' }} \
             ${{ inputs.race_detection && '-race' || '' }} \
+            ${{ !inputs.race_detection && '-short' || '' }} \
             -tags=server \
             $PACKAGES
 
