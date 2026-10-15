@@ -50,6 +50,7 @@ type (
 		configPath string
 		fds        [2]int
 		runDir     string
+		listenPort int
 	}
 
 	UnprivilegedXrootdLauncher struct {
@@ -106,6 +107,9 @@ func makeUnprivilegedXrootdLauncher(daemonName string, xrootdRun string, configP
 	}
 	result.Uid = -1
 	result.Gid = -1
+	if daemonName == "xrootd" {
+		result.ListenPort = xrootdListenPort(isCache)
+	}
 	result.isCache = isCache
 	result.fds, err = syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
@@ -252,6 +256,14 @@ func makeUnprivilegedXrootdLauncher(daemonName string, xrootdRun string, configP
 	return
 }
 
+// The port on which xrootd listens; cmsd does not listen on this port
+func xrootdListenPort(isCache bool) int {
+	if isCache {
+		return param.Cache_Port.GetInt()
+	}
+	return param.Origin_Port.GetInt()
+}
+
 func ConfigureLaunchers(privileged bool, configPath string, useCMSD bool, enableCache bool) (launchers []daemon.Launcher, err error) {
 	xrootdRun := param.Origin_RunLocation.GetString()
 	if enableCache {
@@ -263,7 +275,8 @@ func ConfigureLaunchers(privileged bool, configPath string, useCMSD bool, enable
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create socket pair for xrootd")
 		}
-		launchers = append(launchers, PrivilegedXrootdLauncher{"xrootd", configPath, fds, xrootdRun})
+		port := xrootdListenPort(enableCache)
+		launchers = append(launchers, PrivilegedXrootdLauncher{"xrootd", configPath, fds, xrootdRun, port})
 		if enableCache {
 			setCacheFds(fds)
 		} else {
@@ -274,7 +287,7 @@ func ConfigureLaunchers(privileged bool, configPath string, useCMSD bool, enable
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to create socket pair for xrootd")
 			}
-			launchers = append(launchers, PrivilegedXrootdLauncher{"cmsd", configPath, cmsdFds, xrootdRun})
+			launchers = append(launchers, PrivilegedXrootdLauncher{"cmsd", configPath, cmsdFds, xrootdRun, 0})
 		}
 	} else {
 		var result UnprivilegedXrootdLauncher

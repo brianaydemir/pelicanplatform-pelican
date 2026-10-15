@@ -37,6 +37,13 @@ type (
 		ExtraEnv   []string
 		InheritFds []int
 		RunDir     string
+		// The port on which the daemon listens, or 0 if none.
+		// On Linux, if binding to the port
+		// requires CAP_NET_BIND_SERVICE,
+		// the daemon keeps the capability
+		// across the switch to an unprivileged user,
+		// provided that the current process can pass it on.
+		ListenPort int
 	}
 )
 
