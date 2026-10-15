@@ -136,14 +136,21 @@ func (plauncher PrivilegedXrootdLauncher) Launch(ctx context.Context) (context.C
 		attrs.Dir = plauncher.runDir
 		return nil
 	})
+	// SETUID and SETGID are required for multiuser support; NET_BIND_SERVICE,
+	// when needed, allows the daemon to listen on a privileged port
+	daemon_caps := []cap.Value{cap.SETUID, cap.SETGID}
+	if daemon.ShouldGrantNetBindService(plauncher.Name(), plauncher.listenPort) {
+		daemon_caps = append(daemon_caps, cap.NET_BIND_SERVICE)
+	}
+
 	iab := cap.NewIAB()
 	// Set bounding capabilities: even if xrootd execs a setuid binary, it should never
-	// be able to get anything but SETUID and SETGID
+	// be able to get anything but daemon_caps
 	bound_caps, err := cap.FromText("all=eip")
 	if err != nil {
 		return ctx, -1, err
 	}
-	if err = bound_caps.SetFlag(cap.Inheritable, false, cap.SETUID, cap.SETGID); err != nil {
+	if err = bound_caps.SetFlag(cap.Inheritable, false, daemon_caps...); err != nil {
 		return ctx, -1, err
 	}
 	if err = iab.Fill(cap.Bound, bound_caps, cap.Inheritable); err != nil {
@@ -152,7 +159,7 @@ func (plauncher PrivilegedXrootdLauncher) Launch(ctx context.Context) (context.C
 
 	// Raising the ambient capabilities will also set the inheritable caps
 	amb_caps := cap.NewSet()
-	if err = amb_caps.SetFlag(cap.Inheritable, true, cap.SETUID, cap.SETGID); err != nil {
+	if err = amb_caps.SetFlag(cap.Inheritable, true, daemon_caps...); err != nil {
 		return ctx, -1, err
 	}
 	if err = iab.Fill(cap.Inh, amb_caps, cap.Inheritable); err != nil {

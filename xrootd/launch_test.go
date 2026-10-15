@@ -27,6 +27,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"os"
 	"slices"
@@ -37,6 +38,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pelicanplatform/pelican/daemon"
 	"github.com/pelicanplatform/pelican/param"
 	"github.com/pelicanplatform/pelican/server_utils"
 	"github.com/pelicanplatform/pelican/test_utils"
@@ -152,6 +154,72 @@ func TestMakeUnprivilegedXrootdLauncher_DisableClientX509(t *testing.T) {
 				assert.False(t, slices.Contains(launcher.ExtraEnv, "XRD_CURLDISABLEX509=1"),
 					"expected XRD_CURLDISABLEX509=1 to be absent; got: %v", launcher.ExtraEnv)
 			}
+		})
+	}
+}
+
+// TestConfigureLaunchers_ListenPort verifies that both kinds of launchers
+// give xrootd, but not cmsd, the configured port, which determines whether
+// the daemon is granted CAP_NET_BIND_SERVICE.
+func TestConfigureLaunchers_ListenPort(t *testing.T) {
+	t.Cleanup(test_utils.SetupTestLogging(t))
+
+	listenPort := func(t *testing.T, launcher daemon.Launcher) int {
+		switch l := launcher.(type) {
+		case PrivilegedXrootdLauncher:
+			return l.listenPort
+		case UnprivilegedXrootdLauncher:
+			return l.ListenPort
+		}
+		require.Failf(t, "unexpected launcher type", "%T", launcher)
+		return 0
+	}
+
+	// Caches never use the privileged launcher
+	tests := []struct {
+		privileged  bool
+		enableCache bool
+	}{
+		{false, false},
+		{false, true},
+		{true, false},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("privileged=%t,cache=%t", tc.privileged, tc.enableCache), func(t *testing.T) {
+			server_utils.ResetTestState()
+			var launchers []daemon.Launcher
+			t.Cleanup(func() {
+				// Close the FDs held in globals by ConfigureLaunchers,
+				// plus those of the privileged cmsd, which it does not
+				// save anywhere.
+				setOriginFds([2]int{-1, -1})
+				setCacheFds([2]int{-1, -1})
+				for _, launcher := range launchers {
+					if l, ok := launcher.(PrivilegedXrootdLauncher); ok && l.daemonName == "cmsd" {
+						closePairFds(l.fds)
+					}
+				}
+				server_utils.ResetTestState()
+			})
+
+			runDir := t.TempDir()
+			require.NoError(t, param.Origin_RunLocation.Set(runDir))
+			require.NoError(t, param.Cache_RunLocation.Set(runDir))
+			require.NoError(t, param.Server_DropPrivileges.Set(false))
+			require.NoError(t, param.Cache_DisableClientX509.Set(true))
+			require.NoError(t, param.Origin_Port.Set(443))
+			require.NoError(t, param.Cache_Port.Set(444))
+			wantPort := 443
+			if tc.enableCache {
+				wantPort = 444
+			}
+
+			var err error
+			launchers, err = ConfigureLaunchers(tc.privileged, "/fake/xrootd.cfg", true, tc.enableCache)
+			require.NoError(t, err)
+			require.Len(t, launchers, 2)
+			assert.Equal(t, wantPort, listenPort(t, launchers[0]), "xrootd port")
+			assert.Equal(t, 0, listenPort(t, launchers[1]), "cmsd port")
 		})
 	}
 }

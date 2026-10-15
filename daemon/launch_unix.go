@@ -132,6 +132,8 @@ func (launcher DaemonLauncher) Launch(ctx context.Context) (context.Context, int
 		return ctx, -1, errors.New("If either uid or gid is specified for daemon, both must be specified")
 	}
 
+	grantNetBindService(cmd, launcher.DaemonName, launcher.ListenPort)
+
 	if len(launcher.ExtraEnv) > 0 {
 		// Merge the "extra env" options into the existing OS environment
 		existingEnv := os.Environ()
