@@ -26,6 +26,13 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      # Credentials for pulling the image, if it is in a private repo.
+      # When they are not provided, the image is pulled anonymously.
+      PELICAN_HARBOR_ROBOT_USER:
+        required: false
+      PELICAN_HARBOR_ROBOT_PASSWORD:
+        required: false
 
 permissions:
   contents: read
@@ -36,6 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ${{ inputs.image }}
+      credentials:
+        username: ${{ secrets.PELICAN_HARBOR_ROBOT_USER }}
+        password: ${{ secrets.PELICAN_HARBOR_ROBOT_PASSWORD }}
       volumes:
         # Expose directories on the host that we'd like to empty.
         - /usr/local/lib/android:/host/usr/local/lib/android
