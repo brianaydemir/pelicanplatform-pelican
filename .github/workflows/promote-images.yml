@@ -10,8 +10,11 @@ name: Promote Container Images
 # the tags already in the public repo. Thus, a tag that is never promoted,
 # e.g., one cut only for testing, never moves the floating tags.
 #
-# The job runs in the "image-promotion" environment, whose required
-# reviewers must approve each run.
+# The "approve" job runs in the "image-promotion" environment, whose
+# required reviewers must approve each run. The "promote" job runs in the
+# "harbor-promote" environment, which holds credentials that can pull from
+# the private repo and push to the public repo. (Docker keeps only one
+# credential per registry host, so these must be one account.)
 
 on:
   workflow_dispatch:
@@ -35,10 +38,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  promote:
-    name: Promote ${{ inputs.tag }}
+  approve:
+    name: Approve ${{ inputs.tag }}
     if: ${{ github.repository == 'PelicanPlatform/pelican' }}
     environment: image-promotion
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record the approval
+        env:
+          TAG: ${{ inputs.tag }}
+        run: echo "Approved the promotion of ${TAG}"
+
+  promote:
+    name: Promote ${{ inputs.tag }}
+    needs: approve
+    environment: harbor-promote
     runs-on: ubuntu-latest
     env:
       TAG: ${{ inputs.tag }}
