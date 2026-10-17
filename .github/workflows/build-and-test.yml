@@ -184,7 +184,7 @@ jobs:
   tags:
     name: Set image tags
     outputs:
-      IS_LATEST: ${{ steps.is_latest.outputs.IS_LATEST }}
+      FLOATING_TAGS: ${{ steps.floating_tags.outputs.FLOATING_TAGS }}
       TAG: ${{ steps.tag.outputs.TAG }}
       TIMESTAMP: ${{ steps.timestamp.outputs.TIMESTAMP }}
     runs-on: ubuntu-latest
@@ -196,20 +196,22 @@ jobs:
         id: timestamp
         run: echo "TIMESTAMP=$(date -u +%Y%m%d-%H%M)" >> $GITHUB_OUTPUT
 
-      - name: Set whether to tag this build with "latest"
-        id: is_latest
+      - name: Set the floating tags (e.g., "latest") for this build
+        id: floating_tags
         run: |
-          git fetch --tags
+          set -euo pipefail
 
-          highest_tag=$(git tag -l 'v*.*.*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
-          echo "Current ref: ${GITHUB_REF}"
-          echo "Highest release tag: ${highest_tag}"
-
-          if [ "${GITHUB_REF##*/}" = "${highest_tag}" ]; then
-            echo "IS_LATEST=true" >> $GITHUB_OUTPUT
-          else
-            echo "IS_LATEST=false" >> $GITHUB_OUTPUT
+          FLOATING_TAGS=""
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            git fetch --tags
+            FLOATING_TAGS=$(git tag -l \
+              | ./github_scripts/floating_image_tags.sh "${GITHUB_REF_NAME}" \
+              | paste -sd , -)
           fi
+
+          echo "Current ref: ${GITHUB_REF}"
+          echo "Floating tags: ${FLOATING_TAGS}"
+          echo "FLOATING_TAGS=${FLOATING_TAGS}" >> $GITHUB_OUTPUT
 
       - name: Set the tag to use for this build
         id: tag
@@ -315,7 +317,7 @@ jobs:
             GITHUB_SHA=${{ github.sha }}
             TAG=${{ needs.tags.outputs.TAG }}
             TIMESTAMP=${{ needs.tags.outputs.TIMESTAMP }}
-            IS_LATEST=${{ needs.tags.outputs.IS_LATEST }}
+            FLOATING_TAGS=${{ needs.tags.outputs.FLOATING_TAGS }}
 
       - name: Export digests
         if: ${{ needs.params.outputs.images-to-push != '[]' }}
@@ -362,7 +364,6 @@ jobs:
             type=raw,${{ needs.tags.outputs.TAG }}
             type=raw,${{ needs.tags.outputs.TIMESTAMP }}
             type=raw,sha-{{ sha }}
-            type=raw,enable=${{ needs.tags.outputs.IS_LATEST }},latest
 
       - name: Log in to OSG Harbor
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
@@ -380,9 +381,12 @@ jobs:
 
       - name: Create and push manifest
         working-directory: ${{ runner.temp }}/digests/${{ matrix.image }}
+        env:
+          FLOATING_TAGS: ${{ needs.tags.outputs.FLOATING_TAGS }}
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(tr ',' '\n' <<< "${FLOATING_TAGS}" | sed '/^$/d; s|^|-t ${{ env.REGISTRY_IMAGE }}:|') \
             $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
 
   # The macOS and Windows tests do not depend on the container images being

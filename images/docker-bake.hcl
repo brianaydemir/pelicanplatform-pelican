@@ -41,8 +41,8 @@ variable "GITHUB_SHA" { default = "" }
 variable "TAG" { default = "dev" }
 variable "TIMESTAMP" { default = "" }
 
-# Determines whether to tag the image with "latest".
-variable "IS_LATEST" { default = "false" }
+# Comma-separated list of additional tags, e.g., "latest" or "v26.x".
+variable "FLOATING_TAGS" { default = "" }
 
 function "should_push" {
   params = [image]
@@ -58,7 +58,7 @@ function "tags" {
         TAG,
         TIMESTAMP,
       ],
-      IS_LATEST == "true" ? ["latest"] : [],
+      split(",", FLOATING_TAGS),
     )) : "${REGISTRY_REPO != "" ? "${REGISTRY_REPO}/" : ""}${image}:${tag}-${ARCH}"
   ]
 }
