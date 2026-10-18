@@ -144,29 +144,25 @@ func (plauncher PrivilegedXrootdLauncher) Launch(ctx context.Context) (context.C
 		daemon_caps = append(daemon_caps, cap.NET_BIND_SERVICE)
 	}
 
+	daemon_cap_set := cap.NewSet()
+	if err = daemon_cap_set.SetFlag(cap.Inheritable, true, daemon_caps...); err != nil {
+		return ctx, -1, err
+	}
+
 	iab := cap.NewIAB()
 	// Set bounding capabilities: even if xrootd execs a setuid binary,
-	// it should never be able to get anything but daemon_caps
-	bound_caps, err := cap.FromText("all=eip")
-	if err != nil {
-		return ctx, -1, err
-	}
-	if err = bound_caps.SetFlag(cap.Inheritable, false, daemon_caps...); err != nil {
-		return ctx, -1, err
-	}
-	if err = iab.Fill(cap.Bound, bound_caps, cap.Inheritable); err != nil {
+	// it should never be able to get anything but daemon_caps.
+	// libcap inverts the Bound vector, dropping the capabilities
+	// that are lowered in the set.
+	if err = iab.Fill(cap.Bound, daemon_cap_set, cap.Inheritable); err != nil {
 		return ctx, -1, err
 	}
 
 	// Raising the ambient capabilities will also set the inheritable caps
-	amb_caps := cap.NewSet()
-	if err = amb_caps.SetFlag(cap.Inheritable, true, daemon_caps...); err != nil {
+	if err = iab.Fill(cap.Inh, daemon_cap_set, cap.Inheritable); err != nil {
 		return ctx, -1, err
 	}
-	if err = iab.Fill(cap.Inh, amb_caps, cap.Inheritable); err != nil {
-		return ctx, -1, err
-	}
-	if err = iab.Fill(cap.Amb, amb_caps, cap.Inheritable); err != nil {
+	if err = iab.Fill(cap.Amb, daemon_cap_set, cap.Inheritable); err != nil {
 		return ctx, -1, err
 	}
 	launcher.SetIAB(iab)
