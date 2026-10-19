@@ -13,17 +13,14 @@ permissions:
 jobs:
   full-suite:
     # Mirrors the PR run of test-windows.yml, whose load the hang seems to
-    # need: web_ui passes on its own. Half the shards turn off the Go
-    # runtime's asynchronous preemption, which suspends threads and reads
-    # their context, to test whether it is involved.
-    name: Full suite (asyncpreempt ${{ matrix.asyncpreempt }}, shard ${{ matrix.shard }})
+    # need: web_ui passes on its own.
+    name: Full suite (shard ${{ matrix.shard }})
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        asyncpreempt: ["on", "off"]
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     defaults:
       run:
         shell: bash
@@ -73,27 +70,53 @@ jobs:
             TEST_PELICAN_BINARY |
             tee -a "$GITHUB_ENV"
 
+      - name: Build a go command that can dump its goroutines
+        # Released go commands carry no DWARF, so a debugger can't read
+        # their goroutines. Build one from the same toolchain's source and
+        # release flags, plus debug_dump.go, which dumps them on request.
+        run: |
+          goroot=$(go env GOROOT)
+          cp .github/scripts/debug-windows-hang/debug_dump.go "$(cygpath -u "$goroot")/src/cmd/go/"
+          go build -trimpath -ldflags=-w -o "$RUNNER_TEMP/go-debug/go.exe" cmd/go
+          echo "GOROOT=$goroot" >> "$GITHUB_ENV"
+          cygpath -w "$RUNNER_TEMP/go-debug" >> "$GITHUB_PATH"
+
+      - name: Let the monitor upload artifacts
+        # A hang can keep the runner from reaching the upload step below,
+        # so the monitor uploads from inside the hung step. This exposes the
+        # job's artifact token to later steps, which is acceptable for a
+        # throwaway workflow.
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        with:
+          script: |
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN);
+            core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL);
+
+      - name: Install the monitor's uploader
+        run: |
+          uploader=$(cygpath -u "$RUNNER_TEMP")/uploader
+          mkdir -p "$uploader"
+          cp .github/scripts/debug-windows-hang/upload.js "$uploader/"
+          npm install --prefix "$(cygpath -w "$uploader")" --no-audit --no-fund @actions/artifact@2.3.2
+
       - name: Run "go test" on shared and client-specific code
-        # Healthy runs take 6-11 minutes here. The stuck test binaries seen
-        # so far print nothing, so the evidence is the monitor's thread
-        # states rather than a goroutine dump. -timeout=10m stays above the
-        # slowest package, which takes up to 6.5 minutes. The JSON file is
-        # written as events arrive.
+        # Healthy runs take 6-11 minutes here, and -timeout=10m stays above
+        # the slowest package, which takes up to 6.5 minutes. The monitor
+        # runs detached, in its own console, so that it keeps watching and
+        # uploading if cancelling the step hangs.
         timeout-minutes: 15
         env:
-          GODEBUG: ${{ matrix.asyncpreempt == 'off' && 'asyncpreemptoff=1' || '' }}
+          GO_DEBUG_DUMP_DIR: ${{ github.workspace }}\dumps
+          UPLOADER_DIR: ${{ runner.temp }}\uploader
         run: |
-          pwsh -NoProfile -File .github/scripts/debug-windows-hang/monitor.ps1 \
-            > monitor-errors.log 2>&1 &
-          monitor_pid=$!
-          stop_monitor() {
-            touch monitor.stop
-            for _ in $(seq 15); do
-              kill -0 "$monitor_pid" 2> /dev/null || break
-              sleep 1
-            done
-          }
-          trap stop_monitor EXIT
+          echo "go: $(command -v go)"
+          mkdir -p dumps
+          # shellcheck disable=SC2016  # PowerShell expands these, not bash
+          pwsh -NoProfile -Command '
+            Start-Process pwsh -WindowStyle Hidden -WorkingDirectory $PWD -ArgumentList @(
+              "-NoProfile", "-File", ".github/scripts/debug-windows-hang/monitor.ps1",
+              "-UploadName", "inflight-${{ matrix.shard }}", "-UploaderDir", $env:UPLOADER_DIR)'
+          trap 'touch monitor.stop' EXIT
           gotestsum \
             --format pkgname-and-test-fails \
             --hide-summary=output \
@@ -112,13 +135,13 @@ jobs:
         run: |
           pwsh -NoProfile -File .github/scripts/debug-windows-hang/monitor.ps1 \
             -Once -Top 0 -LogFile processes.txt -ThreadFile processes-threads.txt \
-            >> monitor-errors.log 2>&1 || true
+            > snapshot-errors.log 2>&1 || true
 
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: full-suite-debug-preempt-${{ matrix.asyncpreempt }}-${{ matrix.shard }}
+          name: full-suite-debug-${{ matrix.shard }}
           path: |
             go-test.json
             junit-client.xml
@@ -127,4 +150,6 @@ jobs:
             threads.log
             processes.txt
             processes-threads.txt
+            snapshot-errors.log
+            dumps/
           if-no-files-found: ignore
