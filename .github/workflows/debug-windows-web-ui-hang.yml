@@ -13,14 +13,17 @@ permissions:
 jobs:
   full-suite:
     # Mirrors the PR run of test-windows.yml, whose load the hang seems to
-    # need: web_ui passes on its own.
-    name: Full suite (shard ${{ matrix.shard }})
+    # need: web_ui passes on its own. The hang is the go command stuck in
+    # CreateProcess on a test binary. Half the shards take Defender's file
+    # system filter, WdFilter, out of the way, in case it is to blame.
+    name: Full suite (WdFilter ${{ matrix.wdfilter }}, shard ${{ matrix.shard }})
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        wdfilter: [kept, removed]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     defaults:
       run:
         shell: bash
@@ -81,6 +84,61 @@ jobs:
           echo "GOROOT=$goroot" >> "$GITHUB_ENV"
           cygpath -w "$RUNNER_TEMP/go-debug" >> "$GITHUB_PATH"
 
+      - name: Configure WdFilter and record the environment
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          # The image already turns off real-time protection and excludes
+          # C:\ and D:\, but WdFilter stays loaded and sees every file
+          # operation. Unload it, or failing that, detach it from every
+          # volume.
+          $ErrorActionPreference = 'Continue'
+          & {
+            if ('${{ matrix.wdfilter }}' -eq 'removed') {
+              fltmc unload WdFilter
+              if ($LASTEXITCODE -ne 0) {
+                foreach ($volume in (Get-Volume | Where-Object DriveLetter).DriveLetter) {
+                  fltmc detach WdFilter "${volume}:"
+                }
+              }
+            }
+            Get-MpComputerStatus | Format-List AMRunningMode, AMProductVersion, AMEngineVersion,
+              AntivirusSignatureVersion, RealTimeProtectionEnabled, OnAccessProtectionEnabled,
+              BehaviorMonitorEnabled, IoavProtectionEnabled, IsTamperProtected
+            Get-MpPreference | Format-List DisableRealtimeMonitoring, ExclusionPath, ExclusionProcess
+            fltmc filters
+            fltmc instances
+            Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard Win32_DeviceGuard |
+              Format-List VirtualizationBasedSecurityStatus, SecurityServicesRunning,
+                CodeIntegrityPolicyEnforcementStatus
+            Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' |
+              Format-List CurrentBuild, UBR, DisplayVersion
+            Get-Volume | Where-Object DriveLetter |
+              Format-Table -AutoSize DriveLetter, FileSystem, FileSystemLabel, Size, SizeRemaining
+            "TEMP=$env:TEMP"
+          } *>&1 | Out-File -Width 200 environment.txt
+          Get-Content environment.txt
+
+      - name: Prepare to record kernel stacks
+        # Builds the live kernel dump tool, finds kd, and runs the whole
+        # thing once, which checks that it works and fills the symbol cache.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $livedump = Join-Path $env:RUNNER_TEMP 'livedump.exe'
+          go build -o $livedump .github/scripts/debug-windows-hang/livedump.go
+          $kd = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Debuggers\x64\kd.exe'
+          $symbols = Join-Path $env:RUNNER_TEMP 'symbols'
+          "LIVEDUMP=$livedump" >> $env:GITHUB_ENV
+          "KD=$kd" >> $env:GITHUB_ENV
+          "_NT_SYMBOL_PATH=srv*$symbols*https://msdl.microsoft.com/download/symbols" >> $env:GITHUB_ENV
+          $env:LIVEDUMP = $livedump
+          $env:KD = $kd
+          $env:_NT_SYMBOL_PATH = "srv*$symbols*https://msdl.microsoft.com/download/symbols"
+          & .github/scripts/debug-windows-hang/kernel-stacks.ps1 `
+            -OutFile kernel-selftest.txt -TimeoutSeconds 600
+          Select-String -Pattern '^=== ' kernel-selftest.txt
+
       - name: Let the monitor upload artifacts
         # A hang can keep the runner from reaching the upload step below,
         # so the monitor uploads from inside the hung step. This exposes the
@@ -103,7 +161,8 @@ jobs:
         # Healthy runs take 6-11 minutes here, and -timeout=10m stays above
         # the slowest package, which takes up to 6.5 minutes. The monitor
         # runs detached, in its own console, so that it keeps watching and
-        # uploading if cancelling the step hangs.
+        # uploading if cancelling the step hangs. It notices an overrun two
+        # minutes after the step's limit.
         timeout-minutes: 15
         env:
           GO_DEBUG_DUMP_DIR: ${{ github.workspace }}\dumps
@@ -115,7 +174,10 @@ jobs:
           pwsh -NoProfile -Command '
             Start-Process pwsh -WindowStyle Hidden -WorkingDirectory $PWD -ArgumentList @(
               "-NoProfile", "-File", ".github/scripts/debug-windows-hang/monitor.ps1",
-              "-UploadName", "inflight-${{ matrix.shard }}", "-UploaderDir", $env:UPLOADER_DIR)'
+              "-UploadName", "inflight-${{ matrix.wdfilter }}-${{ matrix.shard }}",
+              "-UploaderDir", $env:UPLOADER_DIR,
+              "-KernelScript", ".github/scripts/debug-windows-hang/kernel-stacks.ps1",
+              "-OverrunMinutes", "17")'
           trap 'touch monitor.stop' EXIT
           gotestsum \
             --format pkgname-and-test-fails \
@@ -130,6 +192,19 @@ jobs:
             ./local_cache \
             ./...
 
+      - name: Wait for the monitor
+        # It may still be recording kernel stacks or uploading. The test
+        # step's trap doesn't run if the runner kills bash.
+        if: always()
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          New-Item -ItemType File -Force monitor.stop | Out-Null
+          while (Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe'" |
+              Where-Object CommandLine -like '*monitor.ps1*') {
+            Start-Sleep -Seconds 5
+          }
+
       - name: Snapshot the remaining processes
         if: always()
         run: |
@@ -141,8 +216,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: full-suite-debug-${{ matrix.shard }}
+          name: full-suite-debug-${{ matrix.wdfilter }}-${{ matrix.shard }}
           path: |
+            environment.txt
+            kernel-selftest.txt
             go-test.json
             junit-client.xml
             monitor.log

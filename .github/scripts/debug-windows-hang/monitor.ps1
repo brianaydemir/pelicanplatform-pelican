@@ -1,14 +1,20 @@
 # Record free memory, the largest processes, and the state of every thread
 # in the go command, gotestsum, their children, and the processes that run
 # the step, for debugging test runs that hang on Windows. Samples once a
-# minute until the stop file exists (unless a stall has been seen) or
-# MaxMinutes pass, or just once with -Once.
+# minute until the stop file exists or MaxMinutes pass, or just once with
+# -Once.
 #
 # When the JSON file stops growing for StallSeconds, the monitor asks the
 # go command for a goroutine dump (see debug_dump.go) and, given
 # UploadName, uploads its files as an artifact, repeating every
 # DumpEverySeconds while the stall lasts. A hang can keep the runner from
-# ever reaching the workflow's own upload step.
+# ever reaching the workflow's own upload step. Given KernelScript, it
+# also records kernel stacks at the first stall.
+#
+# The step that starts the monitor creates the stop file when it ends. If
+# that hasn't happened OverrunMinutes after the monitor started, the step
+# is stuck being cancelled, and the monitor records and uploads all of the
+# above once more.
 
 param(
     [string]$LogFile = 'monitor.log',
@@ -23,6 +29,8 @@ param(
     [int]$DumpEverySeconds = 240,
     [int]$MaxUploads = 8,
     [int]$MaxMinutes = 40,
+    [string]$KernelScript = '',
+    [int]$OverrunMinutes = 0,
     [int]$Top = 15,
     [switch]$Once
 )
@@ -122,12 +130,14 @@ function Send-Files([int]$Number) {
         return
     }
     $name = "$UploadName-$Number"
-    $files = @($JsonFile, $LogFile, $ThreadFile, $ErrorFile)
+    $files = @($JsonFile, $LogFile, $ThreadFile, $ErrorFile, 'environment.txt', 'kernel-selftest.txt')
     if (Test-Path $DumpDir) {
         $files += @(Get-ChildItem $DumpDir -Filter '*.txt' | ForEach-Object { $_.FullName })
     }
     $files = @($files | Where-Object { Test-Path $_ } | ForEach-Object { (Resolve-Path $_).Path })
-    $out = Join-Path $DumpDir "upload-$Number.log"
+    # The uploader's debug lines include a signed upload URL, so keep its
+    # output out of the artifacts.
+    $out = Join-Path $env:RUNNER_TEMP "upload-$Number.log"
     $proc = Start-Process -FilePath 'node' -NoNewWindow -PassThru `
         -RedirectStandardOutput $out -RedirectStandardError "$out.err" `
         -ArgumentList (@((Join-Path $UploaderDir 'upload.js'), $name, $PWD.Path) + $files)
@@ -137,6 +147,9 @@ function Send-Files([int]$Number) {
         $proc.Kill()
         Write-Log "upload of $name timed out"
     }
+    Get-Content $out, "$out.err" -ErrorAction SilentlyContinue |
+        Where-Object { $_ -notmatch '^::' } | Select-Object -Last 5 |
+        Out-File -Append -Encoding utf8 $LogFile
 }
 
 if ($Once) {
@@ -144,23 +157,27 @@ if ($Once) {
     return
 }
 
-$sawStall = $false
-
-# After a stall, keep watching while the step is cancelled, which may hang.
-function Test-StopRequested {
-    (-not $script:sawStall) -and (Test-Path $StopFile)
+function Save-KernelStacks([int]$Number) {
+    if ($KernelScript -eq '') {
+        return
+    }
+    Write-Log "recording kernel stacks ($Number)"
+    & $KernelScript -OutFile (Join-Path $DumpDir "kernel-$Number.txt")
 }
 
 try {
-    $deadline = (Get-Date).AddMinutes($MaxMinutes)
+    $started = Get-Date
+    $deadline = $started.AddMinutes($MaxMinutes)
     $lastSize = -1
-    $lastGrowth = Get-Date
+    $lastGrowth = $started
     $lastDump = [datetime]::MinValue
     $uploads = 0
+    $kernelStacks = 0
+    $overran = $false
 
     # Sample in-process, rather than starting a new process each minute,
     # so that the monitor keeps working if starting processes is what hangs.
-    while (-not (Test-StopRequested) -and (Get-Date) -lt $deadline) {
+    while (-not (Test-Path $StopFile) -and (Get-Date) -lt $deadline) {
         Write-Sample
 
         $size = 0
@@ -173,17 +190,28 @@ try {
             $lastGrowth = $now
         }
         $stalled = ($size -gt 0) -and (($now - $lastGrowth).TotalSeconds -ge $StallSeconds)
-        if ($stalled -and (($now - $lastDump).TotalSeconds -ge $DumpEverySeconds) -and ($uploads -lt $MaxUploads)) {
-            $sawStall = $true
+        $overrun = ($OverrunMinutes -gt 0) -and -not $overran -and
+            (($now - $started).TotalMinutes -ge $OverrunMinutes)
+        $due = $stalled -and (($now - $lastDump).TotalSeconds -ge $DumpEverySeconds) -and
+            ($uploads -lt $MaxUploads)
+        if ($overrun -or $due) {
+            if ($overrun) {
+                Write-Log 'the step has overrun; it may be stuck being cancelled'
+            }
             $lastDump = $now
             Request-Dump
             # The go command checks for a request every 5 seconds.
             Start-Sleep -Seconds 15
+            if ($overrun -or $kernelStacks -eq 0) {
+                $kernelStacks++
+                Save-KernelStacks $kernelStacks
+            }
+            $overran = $overran -or $overrun
             $uploads++
             Send-Files $uploads
         }
 
-        for ($i = 0; $i -lt 12 -and -not (Test-StopRequested); $i++) {
+        for ($i = 0; $i -lt 12 -and -not (Test-Path $StopFile); $i++) {
             Start-Sleep -Seconds 5
         }
     }
