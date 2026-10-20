@@ -37,12 +37,12 @@ function Invoke-Logged([string]$Path, [string]$Arguments) {
     }
 }
 
-# kd matches the image name stored in the kernel, which is cut at 15
+# kd matches the image name stored in the kernel, which is cut at 14
 # characters.
 $commands = @(
     '!process 0 17 go.exe'
     '!process 0 17 gotestsum.exe'
-    '!process 0 17 Runner.Worker.e'
+    '!process 0 17 Runner.Worker.'
     '!process 0 17 MsMpEng.exe'
     '!locks'
     '!fltkd.filters'

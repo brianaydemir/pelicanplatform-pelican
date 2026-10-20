@@ -13,17 +13,28 @@ permissions:
 jobs:
   full-suite:
     # Mirrors the PR run of test-windows.yml, whose load the hang seems to
-    # need: web_ui passes on its own. The hang is the go command stuck in
-    # CreateProcess on a test binary. Half the shards take Defender's file
-    # system filter, WdFilter, out of the way, in case it is to blame.
-    name: Full suite (WdFilter ${{ matrix.wdfilter }}, shard ${{ matrix.shard }})
+    # need: web_ui passes on its own. The hang is a deadlock in NTFS
+    # between creating the image section for a test binary, which flushes
+    # its cached pages, and the lazy writer, which is already writing them
+    # and needs the file's lock to update the USN journal. The pages are
+    # dirty because the go command rewrites the binary's build ID in place.
+    #
+    # Two possible workarounds each get 10 shards: one keeps the go command
+    # from rewriting test binaries, and the other links them on D:, which
+    # may have no USN journal.
+    name: Full suite (${{ matrix.arm }}, shard ${{ matrix.shard }})
     runs-on: windows-latest
     timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
-        wdfilter: [kept, removed]
+        arm: [control, buildid, gotmpdir]
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        exclude:
+          - {arm: control, shard: 7}
+          - {arm: control, shard: 8}
+          - {arm: control, shard: 9}
+          - {arm: control, shard: 10}
     defaults:
       run:
         shell: bash
@@ -84,23 +95,15 @@ jobs:
           echo "GOROOT=$goroot" >> "$GITHUB_ENV"
           cygpath -w "$RUNNER_TEMP/go-debug" >> "$GITHUB_PATH"
 
-      - name: Configure WdFilter and record the environment
+      - name: Record the environment
         continue-on-error: true
         shell: pwsh
         run: |
-          # The image already turns off real-time protection and excludes
-          # C:\ and D:\, but WdFilter stays loaded and sees every file
-          # operation. Unload it, or failing that, detach it from every
-          # volume.
           $ErrorActionPreference = 'Continue'
           & {
-            if ('${{ matrix.wdfilter }}' -eq 'removed') {
-              fltmc unload WdFilter
-              if ($LASTEXITCODE -ne 0) {
-                foreach ($volume in (Get-Volume | Where-Object DriveLetter).DriveLetter) {
-                  fltmc detach WdFilter "${volume}:"
-                }
-              }
+            foreach ($volume in (Get-Volume | Where-Object DriveLetter).DriveLetter) {
+              "USN journal on ${volume}:"
+              fsutil usn queryjournal "${volume}:"
             }
             Get-MpComputerStatus | Format-List AMRunningMode, AMProductVersion, AMEngineVersion,
               AntivirusSignatureVersion, RealTimeProtectionEnabled, OnAccessProtectionEnabled,
@@ -174,11 +177,24 @@ jobs:
           pwsh -NoProfile -Command '
             Start-Process pwsh -WindowStyle Hidden -WorkingDirectory $PWD -ArgumentList @(
               "-NoProfile", "-File", ".github/scripts/debug-windows-hang/monitor.ps1",
-              "-UploadName", "inflight-${{ matrix.wdfilter }}-${{ matrix.shard }}",
+              "-UploadName", "inflight-${{ matrix.arm }}-${{ matrix.shard }}",
               "-UploaderDir", $env:UPLOADER_DIR,
               "-KernelScript", ".github/scripts/debug-windows-hang/kernel-stacks.ps1",
               "-OverrunMinutes", "17")'
           trap 'touch monitor.stop' EXIT
+          case "${{ matrix.arm }}" in
+            buildid)
+              # Given an empty build ID, the linker writes none, so the go
+              # command finds none to replace with a content-based one.
+              export GOFLAGS=-ldflags=-buildid=
+              ;;
+            gotmpdir)
+              mkdir -p "$RUNNER_TEMP/gotmp"
+              GOTMPDIR=$(cygpath -w "$RUNNER_TEMP/gotmp")
+              export GOTMPDIR
+              ;;
+          esac
+          echo "GOFLAGS=$(go env GOFLAGS) GOTMPDIR=$(go env GOTMPDIR)"
           gotestsum \
             --format pkgname-and-test-fails \
             --hide-summary=output \
@@ -216,7 +232,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: full-suite-debug-${{ matrix.wdfilter }}-${{ matrix.shard }}
+          name: full-suite-debug-${{ matrix.arm }}-${{ matrix.shard }}
           path: |
             environment.txt
             kernel-selftest.txt
