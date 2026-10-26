@@ -1,4 +1,4 @@
-<h1 align="center">Pelican Command Line</h1>
+<h1 align="center">Pelican Command Line Tools</h1>
 
 <p align="center">
   <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/PelicanPlatform/pelican/codeql-analysis.yml?style=for-the-badge">
