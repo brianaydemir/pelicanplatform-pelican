@@ -22,10 +22,10 @@ import "testing"
 
 // SkipIfShort skips the calling test when "go test -short" is in effect.
 //
-// Reserve this for tests that measurement shows are not worth their time on
-// every run, or that need something esoteric (HTCondor, rclone, minio, root).
-// AGENTS.md describes the criteria. Call it as the first statement of the
-// test, before any setup starts.
+// Reserve this for tests that measurement shows are not worth their time
+// on every run, or that need something esoteric (HTCondor, rclone, minio,
+// root). CONTRIBUTING.md describes the criteria.
+// Call it as the first statement of the test, before any setup starts.
 func SkipIfShort(t testing.TB, reason string) {
 	t.Helper()
 	if testing.Short() {

@@ -1,409 +1,108 @@
-# Pelican - AI Agent Instructions
+# Instructions for AI Agents
 
-This document provides guidance for AI coding agents (including GitHub Copilot) when working with the Pelican codebase.
+These instructions apply to AI agents that work in Pelican's repository. The repository holds a Go module and a web UI, which is in `web_ui/frontend/`. `go.mod` and `web_ui/frontend/package.json` list their dependencies and the dependencies' versions.
 
-## Problem-Solving Approach
+[`CONTRIBUTING.md`](CONTRIBUTING.md) explains how to build Pelican, run a federation in a box to try a change by hand, regenerate generated files, run the tests and checks, and open a pull request. It also gives guidelines for scoping a change. Read it before starting a task. This file adds rules for agents to those in `CONTRIBUTING.md`.
 
-When presented with an issue or bug, always ask: "Is this an isolated bug, or does it represent a _class_ of bugs that can be fixed?"
+## Conventions
 
-For example, if an issue reports "there's a typo in the config name we pass as a string to a function," the immediate fix is correcting the typo. However, the better observation is: "this function takes config params as strings rather than as typed params, which introduces the ability to make typos. I can solve this and all future typo bugs by changing the signature to make typos impossible."
+### Go
 
-Always seek to prevent entire classes of problems by asking: "How can I prevent other bugs like this in the future?"
+Start each new Go file with this license header, with the current year in place of `{YEAR}`:
 
-## Project Overview
-
-Pelican is a data federation platform that allows users to serve and access datasets through a distributed network of origins and caches. The project includes both server components (Registry, Director, Origin, Cache) and client tools for data transfer.
-
-## Tech Stack
-
-### Backend (Go)
-
-- **Language**: Go 1.26+
-- **Web Framework**: Gin (HTTP server)
-- **CLI Framework**: Cobra
-- **Configuration**: Viper
-- **Logging**: Logrus
-- **Database**: SQLite with GORM (ORM) and Goose (migrations)
-- **API Documentation**: OpenAPI V2.0
-- **Storage Backend**: XRootD
-
-### Frontend (TypeScript/React)
-
-- **Language**: TypeScript
-- **Framework**: React 19.x with Next.js 15.x
-- **UI Library**: Material-UI (MUI) v7
-- **Charts**: Chart.js with various plugins
-- **Build Tool**: Next.js with Turbo
-- **Testing**: Jest
-- **Linting**: ESLint
-- **Formatting**: Prettier
-
-### Additional Dependencies
-
-- **XRootD**: Underlying storage management for Origins and Caches
-- **Prometheus**: Server observability and monitoring
-- **OA4MP**: OAuth Server
-
-## Code Organization
-
-- `api_token/` - API token creation and validation
-- `broker/` - Broker service implementation
-- `byte_rate/` - Byte rate tracking utilities
-- `cache/` - Cache server implementation
-- `client/` - Client-side code for data transfers
-- `client_agent/` - Background client agent for data transfer operations
-- `cmd/` - CLI commands using Cobra
-- `config/` - Configuration management
-- `daemon/` - Daemon utilities
-- `database/` - Database models and migrations
-- `director/` - Director service for federation coordination
-- `docs/` - Documentation and parameter definitions (use one sentence per line for markdown files)
-- `e2e_fed_tests/` - End-to-end federation tests
-- `error_codes/` - Error code definitions and helpers
-- `features/` - Feature/version compatibility definitions and generated metadata
-- `fed_test_utils/` - Shared utilities for federation tests
-- `generate/` - Code generation tools (error codes, Next.js assets, etc.)
-- `htb/` - Hierarchical token bucket (rate limiting)
-- `identity/` - Identity lookup and caching
-- `launcher_utils/` - Utilities for service startup and namespace registration
-- `launchers/` - Service launcher implementations (cache, director, origin, registry)
-- `local_cache/` - Local (single-node) cache implementation
-- `logging/` - Logging level management utilities
-- `lotman/` - Lot (storage quota) management
-- `metrics/` - Prometheus metrics for all services
-- `mock/` - Mock implementations for testing
-- `oa4mp/` - OA4MP OAuth server proxy
-- `oauth2/` - OAuth 2.0 device auth and DCRP flows
-- `origin/` - Origin server implementation
-- `origin_serve/` - Origin serving logic and authorization
-- `p11proxy/` - PKCS#11 proxy
-- `param/` - Typed configuration parameter wrappers around Viper
-- `pelican_url/` - Pelican URL parsing and federation discovery
-- `registry/` - Registry service for namespace management
-- `server_structs/` - Shared server data structures (API responses, auth, DB models)
-- `server_utils/` - Shared utilities for server components
-- `ssh_posixv2/` - SSH POSIX v2 authentication backend
-- `swagger/` - OpenAPI/Swagger specification files
-- `test_utils/` - Shared utilities for unit tests
-- `token/` - Token generation and validation
-- `token_scopes/` - Token scope definitions and utilities
-- `utils/` - General utility functions (crypto, HTTP, etc.)
-- `version/` - Version information
-- `web_ui/` - Go backend for the embedded web UI (API handlers, auth/session, middleware, static asset serving)
-- `web_ui/frontend/` - Next.js web interface
-- `xrootd/` - XRootD integration
-
-## Building and Testing
-
-### Build Commands
-
-First, generate the GoReleaser config:
-
-```bash
-make goreleaser-config
+```go
+/***************************************************************
+ *
+ * Copyright (C) {YEAR}, Pelican Project, Morgridge Institute for Research
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License.  You may
+ * obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ ***************************************************************/
 ```
 
-**Full build with GoReleaser:**
+In new code, read configuration through the typed parameters in the `param` package, such as `param.Server_WebPort.GetInt()`. Change it with a parameter's `Set` method or with `param.Set`, not through `viper`. The getters read a cached copy of the configuration, which these functions update. A change made directly through `viper` does not reach that copy until something rebuilds it, such as a call to `param.Refresh()`.
 
-```bash
-goreleaser build --clean --snapshot --config .goreleaser.generated.yml
-```
+Call `viper` directly only in these places:
 
-**Faster build for testing (single architecture):**
+- The `param` and `config` packages.
+- `cmd/`, to bind Cobra flags with `viper.BindPFlag`.
+- `generate/`, which generates the `param` package.
+- `cmd/config_printer/`, which prints and compares the raw state of `viper`.
+- Code that reads or writes a file other than Pelican's configuration through its own `viper.New()` instance, as `web_ui/ui.go` does for the web configuration file.
 
-```bash
-goreleaser build --clean --snapshot --single-target --config .goreleaser.generated.yml
-```
+Some existing code outside these places calls `viper` directly. Do not copy it.
 
-**Development build (faster):**
+To add a configuration parameter, define it and its default in `docs/parameters.yaml`. The comment at the top of that file lists the defaults that must stay in Go code.
 
-```bash
-make pelican-dev-build
-```
+### Web UI
 
-_Note: Requires creating a `.goreleaser.dev.yml` configuration file. See README.md for an example configuration._
+Put React components in `web_ui/frontend/components/`, pages and routes in `web_ui/frontend/app/`, helper functions in `web_ui/frontend/helpers/`, and hooks in `web_ui/frontend/hooks/`. Write components as functions, and style them with MUI. Prefer explicit types to `any`.
 
-**Build web UI:**
+### Pelican URLs
 
-```bash
-make web-build
-```
-
-### Test Commands
-
-**Go tests:**
-
-Some packages use `client` and `server` build tags to gate tests. Running `go test ./...` without tags skips those tests. For Go tests, Linux and macOS CI runs every package with the `client` tag, then reruns with the `server` tag only the packages whose files differ between the tags. As of this writing, those are `cmd` and `launchers`, but run `.github/scripts/go-test/build_tag_packages.sh` to get the current list, which CI computes on each run:
-
-```bash
-go test -tags client ./...
-go test -tags server ./cmd ./launchers
-```
-
-For Go tests on Windows, CI runs only client-tagged tests:
-
-```bash
-go test -tags client ./...
-```
-
-To run the widest possible set of unit tests locally (a superset of both CI passes), use:
-
-```bash
-go test -tags "client,server" ./...
-```
-
-Tests that run `pelican` or `pelican-server` as a subprocess get them from the helpers in `test_utils/binaries.go`, which build each binary on first use. CI instead points them at its GoReleaser builds by setting `TEST_PELICAN_BINARY` and `TEST_PELICAN_SERVER_BINARY` (Windows sets only the former). To test the same kind of binaries locally, build them with GoReleaser (see above) and set these variables to the binaries' absolute paths, which `.github/scripts/go-test/goreleaser_binaries.sh` prints; `test_utils/binaries.go` documents these and the other `TEST_PELICAN_*` variables.
-
-**Test tiers:** The presumption is that every test runs everywhere, always. CI passes `-short` to `go test` on every push and runs the full suite on a schedule. Mark a test with `test_utils.SkipIfShort(t, "reason")` as its first statement only when one of two things holds. First, it exercises something esoteric: a backend, service or privilege the per-push runners should not depend on, such as HTCondor, rclone, minio or root. Second, measurement shows that the time it adds to a CI run is not worth what it checks; a test that is off the critical path, or that takes a second, saves nothing by being skipped. Both are judgement calls, and the second must rest on observed timings (the JUnit artifacts give per-test times), not on reading the code. To reproduce what a push runs, add `-short`:
-
-```bash
-go test -short -tags "client,server" ./...
-```
-
-**Test individual modules (use whichever tags apply to that module):**
-
-```bash
-go test -tags client ./cmd/
-go test -tags server ./cmd/
-```
-
-**Frontend tests:**
-
-```bash
-cd web_ui/frontend
-npm test
-```
-
-### Linting
-
-**Go linting:**
-
-```bash
-golangci-lint run
-```
-
-The `client` and `server` build tags come from `.golangci.yaml`, so the command above already covers all of package `cmd`. CI additionally lints the platform-specific files, which are invisible on Linux. The whole-program `unused` linter is turned off there because a symbol's only callers often sit in files that the other GOOS excludes:
-
-```bash
-GOOS=darwin golangci-lint run --disable=unused
-GOOS=windows golangci-lint run --disable=unused
-```
-
-**Go formatting:**
-
-```bash
-gofmt -w .
-```
-
-**Frontend linting:**
-
-```bash
-cd web_ui/frontend
-pnpm run lint
-```
-
-**Frontend formatting:**
-
-```bash
-cd web_ui/frontend
-pnpm run format        # Check formatting
-pnpm run format:fix    # Fix formatting
-```
-
-The frontend uses pnpm, not npm; the version is pinned by the `packageManager` field in `web_ui/frontend/package.json`. Use `pnpm install --frozen-lockfile` (the `npm ci` equivalent) for a non-mutating install.
-
-## Code Conventions
-
-### Go Code
-
-1. **License Headers**: All Go files must include the Apache 2.0 license header at the top (use current year):
-
-   ```go
-   /***************************************************************
-    *
-    * Copyright (C) {YEAR}, Pelican Project, Morgridge Institute for Research
-    *
-    * Licensed under the Apache License, Version 2.0 (the "License"); you
-    * may not use this file except in compliance with the License.  You may
-    * obtain a copy of the License at
-    *
-    *    http://www.apache.org/licenses/LICENSE-2.0
-    *
-    * Unless required by applicable law or agreed to in writing, software
-    * distributed under the License is distributed on an "AS IS" BASIS,
-    * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    * See the License for the specific language governing permissions and
-    * limitations under the License.
-    *
-    ***************************************************************/
-   ```
-
-1. **Package Naming**: Use lowercase package names matching the directory name
-
-1. **Error Handling**: Always check and handle errors appropriately
-
-1. **Testing**: Place test files alongside source files with `_test.go` suffix. Tests should be isolated (use temp directories and config reset functions) and not depend on state from other tests. Tests should *avoid* arbitrary sleeps (`time.Sleep` calls will be rejected) for a condition to occur as they lead to unreliable tests Instead, use `require.Eventually` or similar to wait for a specific condition to become true.
-
-1. **Imports**: Organize imports in three groups separated by blank lines:
-
-   ```go
-   import (
-       // Standard library imports (alphabetized)
-       "encoding/json"
-       "net/http"
-       "time"
-
-       // External dependencies (alphabetized)
-       "github.com/google/uuid"
-       "github.com/pkg/errors"
-
-       // Pelican internal packages (alphabetized)
-       "github.com/pelicanplatform/pelican/param"
-       "github.com/pelicanplatform/pelican/utils"
-   )
-   ```
-
-1. **Configuration**: Where possible, configuration should be set using the `param` package which is a wrapper around the commonly-used `viper` with project-specific conventions. Do not use `viper` directly unless making edits to `param` or `config` modules; instead, use `param`.
-
-### TypeScript/React Code
-
-1. **Components**: Use functional components with hooks
-
-1. **Type Safety**: Prefer explicit types over `any`
-
-1. **File Organization**:
-
-   - Components in `web_ui/frontend/components/`
-   - Pages/routes in `web_ui/frontend/app/`
-   - Utilities in `web_ui/frontend/helpers/`
-   - Custom hooks in `web_ui/frontend/hooks/`
-
-1. **Styling**: Use Material-UI components and styling system
-
-1. **Formatting**: Follow Prettier configuration (`.prettierrc.json`)
-
-## Development Workflow
-
-### Environment Setup
-
-Pelican uses Docker containers and VSCode Dev Containers for development. See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup instructions.
-
-Key steps:
-
-1. Fork and clone the repository
-1. Install Docker and VSCode
-1. Pull the development container: `hub.osg-htc.org/pelican-ci/pelican-dev:latest-itb`
-1. Create `.devcontainer/devcontainer.json` using the template from `dev/devcontainer.json`
-1. Build Pelican from source inside the container
-
-### Pull Request Guidelines
-
-- Address a single concern with minimal changes
-- Add tests for new functionality or bug fixes
-- Update documentation in `docs/` folder if needed (use one sentence per line for markdown)
-- Follow the ["fork-and-pull" Git workflow](https://github.com/susam/gitpr)
-- At least one core contributor must review and approve changes
-- Run linters and tests before submitting
-- Rebase against main and wait for passing tests before merge (tests run in dev container built from main branch)
-
-### Configuration
-
-- Server configuration: Prefer YAML files (typically `pelican.yaml`) over command-line arguments (except when testing command-line arguments)
-- Client configuration: Can use federation discovery URLs or explicit configuration
-- Parameters documented in `docs/parameters.yaml`
-
-## Key Features and Patterns
-
-### Object Transfer
-
-- Client commands: `pelican object get`, `pelican object put`, `pelican object copy`
-- All transfers use HTTP (pelican:// and osdf:// URLs specify federation discovery, not transfer protocol)
-- Checksum verification (MD5, SHA1, CRC32)
-- Resume capabilities for interrupted transfers
-
-### Federation Model
-
-- **Director**: Routes client requests to appropriate origins/caches
-- **Registry**: Manages namespace registrations
-- **Origins**: Serve data from storage backends
-- **Caches**: Provide distributed caching layer
-
-### Authorization
-
-- Token-based authorization (not authentication) with support for various issuers
-- OAuth integration via CILogon for web authentication
-- Support for WLCG tokens (https://github.com/WLCG-AuthZ-WG/common-jwt-profile/blob/master/profile.md)
-- Support for SciTokens (https://scitokens.org/technical_docs/Claims)
-
-### Monitoring
-
-- Prometheus metrics integration
-- Health checks for all services
-- Performance monitoring through web UI
-
-## API Documentation
-
-API endpoints are documented using OpenAPI V2.0 (Swagger). The specification lives in `swagger/pelican-swagger.yaml` and is **hand-edited** — there are no code annotations and no generator. When you add, remove, or change the shape of an HTTP endpoint or a request/response type, update the swagger file in the same change. Conventions to follow:
-
-- Pick the right tag (`auth`, `common`, `users`, `me`, `groups`, `invites`, `registry_ui`, `director_ui`, `origin_ui`, `cache_ui`, `collections`, `issuer-admin`, `metrics`, `director`).
-- Note authorization in the description with the existing inline tags: `` `Authentication Required` ``, `` `Admin privilege Required` ``, `` `User Admin Required` ``. OpenAPI 2.0 has no native cookie-auth scheme, so this prose is the contract.
-- Define request/response shapes under `definitions:` and reference them with `$ref`. Reuse existing shapes where the contract genuinely matches; do not introduce near-duplicates.
-- Reflect security-relevant behavior accurately — e.g. when an endpoint's behavior depends on the *kind* of caller (system admin vs owner vs anonymous-token-bearer), say so.
-
-## Testing Philosophy
-
-- Unit tests for individual functions and components
-- Integration tests for service interactions
-- End-to-end tests in `e2e_fed_tests/`
-- Test utilities in `test_utils/` and `fed_test_utils/`
-
-## Security Considerations
-
-- TLS/HTTPS by default for all services
-- Token validation for authenticated operations
-- Regular dependency updates
-- CodeQL analysis in CI/CD pipeline
+In code and documentation, treat the `pelican://`, `osdf://`, and `stash://` schemes as ways to discover a federation, not as transfer protocols. Pelican transfers objects over HTTP. The `pelican_url` package parses these URLs.
 
 ## Documentation
 
-- User documentation: [docs.pelicanplatform.org](https://docs.pelicanplatform.org/)
-- API documentation: Available through web UI at `/api/docs`
-- Parameter reference: `docs/parameters.yaml`
-- HTTP headers: `docs/pelican-http-headers.md`
-- Error codes: `docs/error_codes.yaml`
-- `object get` / `object put` source and destination semantics: `docs/object-transfer-semantics.md`
+`docs/` holds most of Pelican's documentation. `docs/app/` holds the source of the user documentation at https://docs.pelicanplatform.org/.
 
-## Common Gotchas
+Contributors write most of the documentation by hand. Generators produce the rest, such as the CLI reference in `docs/app/commands-reference/`. No check confirms that the hand-written documentation matches the code, so it can be wrong or incomplete. Confirm what it says against the code before relying on it. When a change makes it wrong or incomplete, update it in the same change.
 
-1. **XRootD Integration**: Origins and Caches require XRootD to be properly configured
-1. **MaxMind License**: Director benefits from a MaxMind license key for GeoIP lookups (functions without it, but cannot use GeoIP services)
-1. **OAuth Setup**: Registry requires CILogon OAuth credentials for web authentication
-1. **Port Conflicts**: Default ports may conflict with local services
-1. **TLS Certificates**: Development often uses `TLSSkipVerify: true` but production requires proper certificates
+### HTTP API
 
-## Useful Commands
+`swagger/pelican-swagger.yaml` documents the HTTP API in OpenAPI 2.0. No code annotations or generator produce it. When a change adds or removes an operation, or changes an operation's behavior or the shapes of its requests and responses, update the file in the same change. Follow these conventions in it:
 
-```bash
-# Run a local federation ("federation in a box")
-pelican-server serve --module director,registry,origin,cache
+- Give each operation a tag from the file's top-level `tags:` list. To use a new tag, add it to that list.
+- State the authorization that an operation requires in its description, with one of the file's inline labels: `` `Authentication Required` ``, `` `Admin privilege Required` ``, or `` `User Admin Required` ``. OpenAPI 2.0 has no scheme for cookie authentication, so these labels are the contract.
+- Define the shapes of requests and responses under `definitions:`, and refer to them with `$ref`. Reuse an existing shape where its contract matches. Do not add a near-duplicate.
+- Describe security-relevant behavior accurately. Say so when an operation's behavior depends on the kind of caller, such as a system administrator, an owner, or the bearer of an anonymous token.
 
-# Serve an origin
-pelican-server origin serve -f https://director.example.com -v /tmp/stash/:/test
+### Markdown
 
-# Download an object
-pelican object get /test/file ./local-file
+The `mdformat` pre-commit hook formats `.md` files, but not the `.mdx` pages in `docs/app/`. In those pages, follow the line breaks of the page being edited.
 
-# Generate configuration
-go generate ./...
+## Generated Files
 
-# Validate parameters
-make validate-parameters
-```
+Edit the inputs of generated files, not the generated files. The [Generated Files](CONTRIBUTING.md#generated-files) section of `CONTRIBUTING.md` explains how to recognize generated files. The code of each generator shows which files it reads and writes. The generator in `generate/` reads YAML files such as `docs/parameters.yaml`. The `//go:generate` directives in `cmd/main.go` write the CLI reference in `docs/app/commands-reference/` from the Cobra commands.
 
-## Resources
+After a change to an input, run the commands in that section. Include the regenerated files in the change.
 
-- Main Repository: https://github.com/PelicanPlatform/pelican
-- Documentation: https://docs.pelicanplatform.org/
-- Website: https://pelicanplatform.org/
-- Contributing Guide: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Security Policy: [SECURITY.md](SECURITY.md)
+## Building
+
+To build Pelican, follow the [Building](CONTRIBUTING.md#building) section of `CONTRIBUTING.md`. After a build, check `git status`. Report any change to `go.mod`, `go.sum`, or generated files that the task did not call for.
+
+The web UI uses pnpm, not npm. To install its dependencies, run `pnpm install --frozen-lockfile` in `web_ui/frontend/`. That command fails rather than change `pnpm-lock.yaml`. Change the lockfile only when the task changes the web UI's dependencies.
+
+## Testing
+
+The [Testing](CONTRIBUTING.md#testing) section of `CONTRIBUTING.md` explains how to run the tests and gives the rules for writing them. Follow those rules.
+
+### Running Go Tests
+
+Before attributing a test failure to a change, check that the tools that the test needs are installed. `CONTRIBUTING.md` names the tools whose absence makes tests fail rather than skip. If one is missing, report it. Do not change code or tests to work around it.
+
+### Writing Go Tests
+
+To apply the criterion for `test_utils.SkipIfShort` that concerns a test's time, take the time from the JUnit artifacts of CI runs. Do not estimate it from the test's code. The test workflows upload the artifact `junit-pelican-<os>`, such as `junit-pelican-Linux`. On Linux and macOS, they also upload `junit-pelican-server-<os>`. Download one with `gh run download <run-id> --name <artifact>`. Use runs that test the full suite, such as those for pushes to `main`. Pull request runs skip the tests that already call `SkipIfShort`.
+
+### Running Web UI Tests
+
+After a change to the web UI, run its Jest tests with `pnpm test` in `web_ui/frontend/`. No CI workflow runs them. CI runs the Playwright tests in `web_ui/frontend/e2e/`, and `.github/workflows/test-webui-e2e.yml` shows which ones. Run them only when the task calls for it, as `web_ui/frontend/e2e/README.md` describes.
+
+## Checks
+
+Before finishing a change, run each check in the [Checks](CONTRIBUTING.md#checks) section of `CONTRIBUTING.md` that applies to it:
+
+- Run `pre-commit run --files` on the changed files. Review the fixes that the hooks make.
+- After a change to Go code, lint it with `golangci-lint run` once for each `GOOS` that CI uses. `pre-commit run --files` skips the hooks for golangci-lint, which run only in the `pre-push` and `manual` stages. `.golangci.yaml` sets both build tags, so these commands cover all of the `cmd` package. Use the version of golangci-lint that CI uses.
+- After a change to the web UI or to `docs/parameters.yaml`, run the check for it.
