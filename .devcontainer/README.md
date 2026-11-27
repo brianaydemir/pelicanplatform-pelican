@@ -38,8 +38,4 @@ When it runs as `vscode`, Pelican reads its configuration from `~/.config/pelica
 
 ### Ports
 
-`devcontainer.json` forwards these ports from the container to your machine:
-
-- 8444: Default Pelican server port
-- 8443: Pelican web UI port
-- 8080: Additional service port
+`devcontainer.json` forwards ports 8444 and 8443 from the container to your machine. `Server.WebPort` (default: 8444) sets the port of a server's web UI and API, so the web UI of a server in the container is at https://localhost:8444. `Origin.Port` (default: 8443) sets the port on which an origin serves data. `Cache.Port` (default: 8442) sets the port on which a cache serves data. `devcontainer.json` labels port 8442 but does not forward it.

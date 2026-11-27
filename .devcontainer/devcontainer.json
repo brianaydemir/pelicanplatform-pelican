@@ -6,21 +6,20 @@
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	"forwardPorts": [
 		8444,
-		8443,
-		8080
+		8443
 	],
 	"portsAttributes": {
 		"8444": {
-			"label": "Pelican Server",
+			"label": "Pelican Web UI and API",
 			"onAutoForward": "notify"
 		},
 		"8443": {
-			"label": "Pelican Web UI",
+			"label": "Pelican Origin Data",
 			"onAutoForward": "notify"
 		},
-		"8080": {
-			"label": "Additional Service",
-			"onAutoForward": "silent"
+		"8442": {
+			"label": "Pelican Cache Data",
+			"onAutoForward": "notify"
 		}
 	},
 	"customizations": {
