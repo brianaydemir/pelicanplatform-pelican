@@ -2,399 +2,233 @@
 
 Welcome! We are glad that you want to contribute to the Pelican project! 💖
 
-As you get started, you are in the best position to give us feedback on areas of our project that we need help with including:
-
-- Problems found during setting up a new developer environment
-- Gaps in our Quickstart Guide or documentation
-- Bugs in our automation scripts
-
-If anything doesn't make sense, or doesn't work when you run it, please open a [bug report](https://github.com/PelicanPlatform/pelican/issues/new?assignees=&labels=bug&projects=&template=bug_report.md&title=) and let us know!
-
-## Quicklinks
-
-- [Ways to Contribute](#ways-to-contribute)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-  - [Issues](#issues)
-  - [Pull Requests](#pull-requests)
-  - [Pull Requests that Modify Pelican's Dependencies](#pull-requests-that-modify-pelicans-dependencies)
-- [Development Environment Setup](#development-environment-setup)
-- [Code Quality Tools](#code-quality-tools)
-  - [Using Pre-commit Hooks](#using-pre-commit-hooks)
-- [Ask for Help](#ask-for-help)
-
-## Ways to Contribute
-
-We welcome many different types of contributions including:
-
-- New features
-- Builds, CI/CD
-- Bug fixes
-- Documentation
+As a newcomer, you are in the best position to tell us where the project needs help: problems you encounter while setting up a development environment, gaps in the documentation, and bugs in our scripts. If anything doesn't make sense, or doesn't work when you run it, please open a [bug report](https://github.com/PelicanPlatform/pelican/issues/new?assignees=&labels=bug&projects=&template=bug_report.md&title=) and let us know!
 
 ## Tech Stack
 
-Pelican is developed based on the following tech stack:
+Pelican's servers and client are [Go](https://go.dev/) programs. They use these libraries, among others:
 
-- Pelican Server/Client
-  - [Go](https://go.dev/)
-  - [Gin](https://gin-gonic.com/) (HTTP server), [Viper](https://github.com/spf13/viper) (Configuration), [Cobra](https://cobra.dev/) (CLI), [Logrus](https://github.com/sirupsen/logrus) (Logging), [Gorm](https://gorm.io/) (ORM), [Goose](https://github.com/pressly/goose) (Database migration)
-  - [OpenAPI V2.0](https://swagger.io/specification/v2/): API documentation
-  - [SQLite](https://www.sqlite.org/): Database
-- Pelican Server Website
-  - [TypeScript](https://www.typescriptlang.org/)
-  - [React](https://react.dev/)
-  - [Next.js](https://nextjs.org/)
+- [Cobra](https://cobra.dev/) for the command line
+- [Viper](https://github.com/spf13/viper) for configuration
+- [Gin](https://gin-gonic.com/) for HTTP
+- [Logrus](https://github.com/sirupsen/logrus) for logging
+- [GORM](https://gorm.io/) and [Goose](https://github.com/pressly/goose) for the [SQLite](https://www.sqlite.org/) database and its migrations
+- [`github.com/prometheus/client_golang`](https://github.com/prometheus/client_golang) for metrics
 
-In addition, Pelican services rely on the following software dependencies:
+The servers also embed a [Prometheus](https://prometheus.io/) server, which collects metrics and answers queries about them.
 
-- [XRootD](https://xrootd.org/): Underlying storage management software for Pelican Origin and Caches
-- [Prometheus](https://prometheus.io/): Server observability and monitoring
-- [OA4MP](https://github.com/ncsa/oa4mp): OAuth Server
+The servers' web UI uses [TypeScript](https://www.typescriptlang.org/), [React](https://react.dev/), and [Next.js](https://nextjs.org/), among others.
 
-## Getting Started
+`swagger/pelican-swagger.yaml` documents the HTTP API in [OpenAPI 2.0](https://swagger.io/specification/v2/).
 
-Contributions are made to this repo via Issues and Pull Requests (PRs). A few general guidelines that cover both:
+Origins and caches can serve data through [XRootD](https://xrootd.org/), depending on configuration.
 
-- To report security vulnerabilities, please follow our [Security Policy](SECURITY.md).
-- Search for existing Issues and PRs before creating your own.
-- We work hard to makes sure issues are handled in a timely manner but depending on the priorities and developer availability, it could take a while to investigate the root cause.
-- A friendly ping in the comment thread to the submitter or a contributor can help draw attention if your issue is blocking.
+## Issues
 
-### Issues
+Use GitHub issues to report problems, to request features, and to discuss a change before opening a pull request. To report a security vulnerability, follow the [security policy](SECURITY.md) instead.
 
-Issues should be used to report problems with the software, request a new feature, or to discuss potential changes before a PR is created. When you create a new Issue, a template will be loaded that will guide you through collecting and providing the information we need to investigate.
+Before opening an issue, search the existing issues and pull requests. If an issue already describes your problem, add your reproduction details to it rather than opening a new one.
 
-If you find an Issue that addresses the problem you're having, please add your own reproduction information to the existing issue rather than creating a new one.
+Before you start work on an issue, comment on it to say so.
 
-We have good first issues for new contributors and help wanted issues suitable for any contributor. [good first issue](https://github.com/PelicanPlatform/pelican/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) has extra information to help you make your first contribution. [help wanted](https://github.com/PelicanPlatform/pelican/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) are issues suitable for someone who isn't a core maintainer and is good to move onto after your first pull request.
+## Development Environment
 
-Sometimes there won’t be any issues with these labels. That’s ok! There is likely still something for you to work on. If you want to contribute but you don’t know where to start or can't find a suitable issue, you can start a [GitHub discussion thread](https://github.com/PelicanPlatform/pelican/discussions/categories/general) for ideas or questions.
+Fork the [Pelican repository](https://github.com/PelicanPlatform/pelican), and clone your fork.
 
-Once you see an issue that you'd like to work on, please post a comment saying that you want to work on it. Something like "I want to work on this" is fine.
+The recommended environment is Pelican's development container, which holds the tools to build, test, and run Pelican. It runs in GitHub Codespaces or locally in VS Code. [`.devcontainer/README.md`](.devcontainer/README.md) explains how to open it.
 
-### Pull Requests
+To develop without the container, install:
 
-PRs to our software are always welcome and can be a quick way to get your fix or improvement slated for the next release. In general, PRs should:
+- [Go](https://go.dev/), at the version that `go.mod` requires or later
+- [golangci-lint](https://golangci-lint.run/), at the version that `.pre-commit-config.yaml` pins
+- [Node.js](https://nodejs.org/) and [pnpm](https://pnpm.io/), at the versions that `web_ui/frontend/package.json` names
+- [Python 3](https://www.python.org/)
+- [GoReleaser](https://goreleaser.com/)
+- [GNU Make](https://www.gnu.org/software/make/)
+- [pre-commit](https://pre-commit.com/)
+- [XRootD](https://xrootd.org/) and Pelican's XRootD plugins, to run XRootD-based origins and caches, and to run the tests that start a federation. Without them, those tests fail rather than skip.
 
-- Only fix/add the functionality in question **OR** address wide-spread whitespace/style issues, not both.
-- Add unit or integration tests for fixed or changed functionality (if a test suite already exists).
-- Address a single concern in the least number of changed lines as possible.
-- Include documentation in the repo under the [docs](./docs/) folder.
+The development container includes everything in this list except golangci-lint. To run the Go linters in the container, install golangci-lint in it.
 
-For changes that address core functionality or would require breaking changes (e.g. a major release), it's best to open an Issue to discuss your proposal first. This is not required but can save time creating and reviewing changes.
+Pelican's XRootD plugins, such as [`xrdhttp-pelican`](https://github.com/PelicanPlatform/xrdhttp-pelican) and [`xrdcl-pelican`](https://github.com/PelicanPlatform/xrdcl-pelican), must be at versions that work with the installed XRootD. `images/Dockerfile` shows which packages the container images install, and at which versions. `github_scripts/osx_install.sh` shows how CI builds XRootD and the plugins from source on macOS, including from Pelican's fork of XRootD.
 
-After you open the PR, it is required that at least one core contributor reviews and approves your changes. We monitor and triage new PRs and assign reviewers based on the scope of the PR. If your open PR is not reviewed after a week since it's open, please ping any of the core contributors as a reminder.
+## Building
 
-In general, we follow the ["fork-and-pull" Git workflow](https://github.com/susam/gitpr)
-
-1. Fork the repository to your own Github account
-1. Clone the project to your machine
-1. Create a branch locally with a succinct but descriptive name
-1. Commit changes to the branch
-1. Following any formatting and testing guidelines specific to this repo
-1. Push changes to your fork
-1. Open a PR in our repository and follow the PR template so that we can efficiently review the changes.
-
-### Pull Requests that Modify Pelican's Dependencies
-
-Due to how Pelican's build and test workflows are structured, any proposed development that makes changes to the packages installed into [the container images](images/Dockerfile) must be split into two separate PRs: one for updating the packages, and one for the other changes, e.g., to code, that depend on those updated packages being present.
-
-It is possible to test the combined affect of these PRs on your fork, albeit with a bit of work. We ask that you go through this extra work because it serves no one well if the proposed changes to the packages do not actually support your other proposed changes.
-
-First, you will need access to a container image registry where you can push and pull images, and where you can create a "robot" account with similar privileges. Do not give GitHub Actions access to your own credentials.
-
-Second, you will need to do the following:
-
-1. Enable the running of GitHub Actions on your fork. They are disabled by default.
-
-1. Update [.github/scripts/container-images/config.sh](.github/scripts/container-images/config.sh) with your GitHub fork and corresponding container image repository, as its `CI_REPO`. (At the discretion of Pelican's core contributors, this change can be merged into the main [PelicanPlatform/pelican](https://github.com/PelicanPlatform/pelican) repository.)
-
-1. Create an environment named `harbor-ci` on your fork, and add `PELICAN_HARBOR_PUSH_USER` and `PELICAN_HARBOR_PUSH_PASSWORD` environment secrets to it, with contents befitting of their names. Only the jobs that push images built off of `main` or semver tags join this environment. (The image registry used by Pelican is implemented by [Harbor](https://goharbor.io/), hence the secrets' names, but any Docker-like registry should work.)
-
-1. If pulling images from your registry requires authentication, also create an environment named `harbor-pull` on your fork, and add `PELICAN_HARBOR_PULL_USER` and `PELICAN_HARBOR_PULL_PASSWORD` environment secrets to it, preferably for an account that can only pull. The Linux tests for pushes to `main` and to semver tags join this environment.
-
-1. As needed, push a new tag to your fork. The tag should be a [semver](https://semver.org/) tag following Pelican's release tagging scheme. The branch should be the one that you will eventually use to create pull requests against the main [PelicanPlatform/pelican](https://github.com/PelicanPlatform/pelican) repo. The tag's images are pushed to your `CI_REPO`, and a draft release is created for it.
-
-1. Review the results of the GitHub Actions that were triggered.
-
-1. Delete releases and pre-releases, and their corresponding tags, as needed to keep your fork clean.
-
-To also test the promotion of images (see [.github/workflows/README.md](.github/workflows/README.md)), set `RELEASE_REPO` for your fork as well, on the same registry host as `CI_REPO`. Then create the `harbor-promote` and `image-promotion` environments on your fork, as described in that README.
-
-## Development Environment Setup
-
-We use Docker containers and VSCode Dev Container to setup our dev environment. We provide a pre-build Docker image for developers, which includes all the development dependencies. The repository includes a devcontainer configuration that works with both GitHub Codespaces and local VS Code Dev Containers.
-
-### Option 1: GitHub Codespaces (Quickest)
-
-For quick fixes or contributions, you can use GitHub Codespaces to develop in the browser:
-
-1. Navigate to the [Pelican repository](https://github.com/PelicanPlatform/pelican) (or your fork) on GitHub
-1. Click the "Code" button and select "Codespaces"
-1. Click "Create codespace on main" (or your branch)
-1. Wait for the container to build and start - you'll have a fully-configured development environment in your browser!
-
-The devcontainer will automatically install all necessary dependencies and tools.
-
-### Option 2: Local Development with VS Code Dev Containers
-
-For a local development environment:
-
-#### Before Start
-
-[Fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo#forking-a-repository) Pelican repository and [Clone](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo#cloning-your-forked-repository) your fork to your machine. The link is pointing to GitHub instructions where they use a demo repository. You need to replace it by https://github.com/PelicanPlatform/pelican
-
-#### Install and Start Docker
-
-Follow the [instruction](https://docs.docker.com/get-docker/) from Docker to download and install Docker. You need Docker for running the development container.
-
-After installation, for macOS and Windows user, start your Docker Desktop app and wait for a couple of minutes for Docker to start. If the whale icon is animated, it is probably still in the process of starting. You can click on the icon to see the status.
-
-![docker-image](./docs/images/docker-startup.png)
-
-Run the following command to test your installation (the exact version may be different from what's shown below):
+GoReleaser builds Pelican's binaries. To build them for the local platform, generate GoReleaser's configuration, then build:
 
 ```bash
-$ docker --version
-Docker version 25.0.2, build 29cf629
+make goreleaser-config
+goreleaser build --clean --snapshot --single-target --config .goreleaser.generated.yml
 ```
 
-#### Install VScode
+GoReleaser writes the binaries to directories under `dist/`. To build only the client or only the servers, add `--id pelican` or `--id pelican-server`.
 
-Follow the [instruction](https://code.visualstudio.com/download) to download and install VSCode. This is the IDE we use to develop Pelican.
+Before it builds, GoReleaser tidies the Go module, runs `go generate ./...`, and builds the web UI with `make web-build`. A build can therefore change `go.mod`, `go.sum`, and generated files. [`web_ui/frontend/README.md`](web_ui/frontend/README.md) describes how to develop the web UI.
 
-Additionally, VSCode has a nice feature called Dev Container to streamline development inside a Docker container.
+## Running Pelican
 
-#### Setup Dev Container
+Run Pelican's binaries from the root of your clone, after a build for the local platform.
 
-The repository now includes a `.devcontainer` configuration, so you don't need to create it manually!
+### Client
 
-- Open your Pelican clone in VSCode
-
-- Install the [Dev Container extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-
-  ![dev-container-screenshot](./docs/images/dev-container.png)
-
-- Check installation: With the Dev Containers extension installed, you will see a new Status bar item at the far left.
-
-  ![dev-container-icon](./docs/images/dev-container-bl-icon.png)
-
-- Reopen in Container: Click the Dev Container icon on the bottom left corner to open the menu. Click "Reopen in Container" to reopen your VSCode workspace in the dev container.
-
-  ![dev-container-reopen](./docs/images/dev-container-reopen.png)
-
-  VS Code will automatically detect the `.devcontainer/devcontainer.json` configuration and use it.
-
-- Wait for Dev Container to start: There will be a loading notification at the bottom-right corner while the Dev Container is starting. The first time may take several minutes as it pulls the development container image (`hub.osg-htc.org/pelican-ci/pelican-dev:latest-itb`).
-
-  ![dev-container-loading](./docs/images/dev-container-loading.png)
-
-- Check you are connected to the Dev Container: Once connected, the bottom left status will show your connection status:
-
-  ![dev-container-status](./docs/images/dev-container-status.png)
-
-### Build Pelican from Source
-
-We use [GoReleaser](https://goreleaser.com/) to manage compiling and distributing Pelican binaries. The Pelican development container comes with GoReleaser installed. To build Pelican, start a new terminal in your VSCode workspace:
-
-![vscode-start-terminal](./docs/images/vscode-start-terminal.png)
-
-> **Note**: the VSCode terminal you opened is connected to the *development container*, not your host machine. We will work inside the container for the rest of the instructions. The Dev Container automatically mounts your repository to the container and syncs any changes. In Codespaces, the repository is mounted at `/workspaces/pelican`. In local Dev Containers, the path depends on where you cloned the repository.
-
-Navigate to the repository root in the terminal (if not already there) and run the following commands:
+To check the client, download a test object from the [OSDF](https://osg-htc.org/services/osdf), a public federation:
 
 ```bash
-$ make goreleaser-config
-$ goreleaser build --single-target --clean --snapshot --config .goreleaser.generated.yml
+dist/pelican_*/pelican object get pelican://osg-htc.org/pelicanplatform/test/hello-world.txt ~/hello-world.txt
+cat ~/hello-world.txt
 ```
 
-Where:
+The object reads "If you are seeing this message, getting an object from OSDF was successful." The [client documentation](https://docs.pelicanplatform.org/getting-data-with-pelican/client) describes the client's other commands and options.
 
-- `build` is the command to build Pelican binaries
-- `--single-target` is the argument to only build one binary that fits to your machine. By default, GoReleaser will build binaries for Linux, macOS, Windows, etc. For development purpose, you should only need one binary.
-- `--clean` is the argument to remove existing build directory before building
-- `--snapshot` is the argument to only build for development and testing, not for releasing
-- `--config .goreleaser.generated.yml` tells GoReleaser to use the generated Pelican config file
+### Federation in a Box
 
-The build takes around 1-3 minutes to finish. It usually takes longer if this is your first time build Pelican. The following output means the build is successful:
+`pelican-server serve` can run several servers at once. When it runs a director, a registry, an origin, and a cache, they form a federation in a box: a whole federation on one machine.
 
-```bash
-...
-  • building binaries
-    • partial build                                  match=target=linux_arm64
-    • building                                       binary=dist/pelican_linux_arm64/pelican
-    • took: 3s
-  • storing artifacts metadata
-    • writing                                        file=dist/artifacts.json
-  • build succeeded after 1m7s
-  • thanks for using goreleaser!
-```
+Run the federation in a box as a user other than root. As root, Pelican runs XRootD as the `xrootd` user, which cannot read the origin's files in root's home directory. VS Code and Codespaces run the development container as `vscode`. A container started directly from its image runs as root, but the image's test users, such as `alice`, are not root.
 
-The built artifacts are located in the `dist` directory. The binary location depends on your system architecture (e.g., `dist/pelican_linux_arm64/pelican` for ARM64, `dist/pelican_linux_amd64/pelican` for AMD64).
-
-```bash
-# Navigate to the appropriate directory based on your architecture
-$ cd dist/pelican_linux_*/
-$ ls
-pelican
-```
-
-Now you are able to run the built Pelican binary.
-
-### Configure Pelican
-
-If you are developing Pelican _Client_, you may skip the following content and dive right into it. However, if you are developing Pelican _Server_ components (Registry, Director, Origin, and Cache) or you want to set up your local federation, follow the instruction below to configure Pelican.
-
-- Setup a config file
-
-  - Create a new file in your repository root called `pelican.yaml`
-  - Copy and paste the following content to the file:
-    ```yaml
-    TLSSkipVerify: true
-    ```
-
-- Link the config file to the Pelican config location The default location for Pelican config file is at `/etc/pelican/pelican.yaml` for root user. For non-root user, it's at `~/.config/pelican/pelican.yaml`
-
-  - Navigate to your repository root directory and run the following commands:
-
-    ```bash
-    # Verify you're in the repository root (should show pelican.yaml)
-    $ ls pelican.yaml
-    pelican.yaml
-
-    # Remove default config and create symlink
-    $ rm -f /etc/pelican/pelican.yaml
-    $ ln -s "$PWD/pelican.yaml" /etc/pelican/pelican.yaml
-    ```
-
-  - Verify that the symlink was created correctly:
-
-    ```bash
-    $ cat /etc/pelican/pelican.yaml
-    TLSSkipVerify: true
-    ```
-
-- Create an empty file named `oidc-client-id` in your repository root and link to `/etc/pelican/oidc-client-id`. This file is required to run Pelican Registry and any other Pelican services if you want to enable server website login through OAuth.
-
-- Create an empty file named `oidc-client-secret` and link it to `/etc/pelican/oidc-client-secret`. This is the OAuth client secret required for OAuth login.
-
-Don't worry about the content of the files for now. We will set them up later.
-
-- Get your [MaxMind](https://dev.maxmind.com/geoip/docs/databases/city-and-country) license key for running Pelican Director. Follow the instruction from our [docs](https://docs.pelicanplatform.org/serving_a_federation#get-maxmind-license-key-required) website. The license is free.
-
-- Use the [template configuration file](./dev/dev_pelican.yaml) to start off. Copy and paste the content to your `pelican.yaml` file.
-
-At this point, your repository should have the following files in the root directory:
-
-- `.devcontainer/` - The Dev Container configuration files (automatically included in the repository)
-- `oidc-client-id` - The empty file for OAuth client ID (created by you)
-- `oidc-client-secret` - The empty file for OAuth client secret (created by you)
-- `pelican.yaml` - Your Pelican configuration file (created by you)
-- (Plus all the existing repository files and directories)
-
-### Run Pelican Client
-
-To run Pelican client, navigate to the folder where the built binary is located:
-
-```bash
-# List available build outputs to find your architecture
-$ ls dist/
-# pelican_linux_amd64  pelican_linux_arm64  ...
-
-# Navigate to the appropriate directory for your architecture
-$ cd dist/pelican_linux_*/
-```
-
-and run Pelican client to fetch an object:
-
-```bash
-$ ./pelican object copy -f https://osg-htc.org /pelicanplatform/test/hello-world.txt downloaded-testfile.txt
-```
-
-This will download a test file from our OSDF federation to your current working directory. Check the object is downloaded:
-
-```bash
-cat downloaded-testfile.txt
-Hello, World!
-```
-
-For client configuration and further details, refer to our [documentation website](https://docs.pelicanplatform.org/client-usage).
-
-### Run Pelican Server
-
-Running Pelican server requires different configuration based on server type. Please follow our documentation website to start a Pelican [Origin](https://docs.pelicanplatform.org/serving_an_origin), [Cache](https://docs.pelicanplatform.org/serving_a_cache), [Registry](https://docs.pelicanplatform.org/serving_a_federation#serve-a-registry), or the [Director](https://docs.pelicanplatform.org/serving_a_federation#serve-a-director).
-
-To run a Pelican Registry, you need to setup a CILogon OAuth client. Follow the instruction [here](https://docs.pelicanplatform.org/serving_a_federation#get-oidc-credential-required) to proceed.
-
-### Run a Local Pelican Federation
-
-It is possible to set up your local Pelican federation and run central services as well as Pelican Origin/Cache on a single machine, or even a single process. We recommend using the "federation in a box" feature to run your local federation.
-
-> Before running the local Pelican federation, you need to have MaxMind license key and CILogon OAuth client setup.
-
-If you use the template configuration file, you need to change the `Federation.DiscoverUrl` to `https://<hostname>:8444` so that your local services are pointed to your local federation. Replace the `<hostname>` by the hostname of your container. You may get the `hostname` by running:
-
-```bash
-$ hostname
-86fb8a78086b
-```
-
-To start "federation in a box", run the following command instead:
-
-```bash
-./pelican-server serve --module director,registry,origin,cache
-```
-
-This will spin up a fully functional Pelican local federation for you.
-
-## Code Quality Tools
-
-### Using Pre-commit Hooks
-
-We use [pre-commit](https://pre-commit.com/) to automatically run a variety of code quality checks before you commit your changes. This helps maintain consistent code quality across the project and catches common issues early in the development process.
-
-#### Why We Use Pre-commit
-
-Pre-commit hooks automatically check your code for issues when you run `git commit`, helping to:
-
-- **Catch formatting issues**: Automatically fix trailing whitespace, ensure files end with newlines, and format markdown files
-- **Prevent common mistakes**: Check for large files being accidentally committed, validate YAML syntax
-- **Enforce code quality**: Run linters like `golangci-lint` for Go code and `shellcheck` for shell scripts
-- **Fix typos**: Automatically detect and suggest fixes for spelling errors using the `typos` checker
-- **Save review time**: Fix issues locally before creating a PR, reducing back-and-forth during code review
-
-#### Installation and Setup
-
-To set up pre-commit in your local repository clone:
-
-1. Install pre-commit (requires Python 3):
+1. Create a directory for the origin to export, with an object in it:
 
    ```bash
-   $ python3 -m pip install pre-commit
+   mkdir -p ~/fed/data
+   echo "Hello from a federation in a box" > ~/fed/data/hello.txt
    ```
 
-1. Install the git hook scripts (from the repository root):
+1. Create a configuration file for the federation:
 
    ```bash
-   $ pre-commit install
-   pre-commit installed at .git/hooks/pre-commit
+   cat > ~/fed/pelican.yaml <<EOF
+   TLSSkipVerify: true
+   Origin:
+     StoragePrefix: $HOME/fed/data
+     FederationPrefix: /test
+     EnablePublicReads: true
+   Registry:
+     RequireOriginApproval: false
+     RequireCacheApproval: false
+   EOF
    ```
 
-Once installed, pre-commit will automatically run every time you execute `git commit`. If any hooks fail, the commit will be aborted and you'll see the issues that need to be fixed. Many hooks will automatically fix the issues for you - double check what they've changed and if all looks good, just stage the changes and commit again.
+   With this configuration, the origin exports `~/fed/data` as the namespace `/test` and lets anyone read it. The registry approves the origin and the cache without an administrator. The servers use self-signed certificates. `TLSSkipVerify` lets the client and the servers accept them.
 
-#### Skipping Pre-commit (Not Recommended)
+1. Start the federation:
 
-If you need to commit without running the hooks (e.g., for a work-in-progress commit), you can use:
+   ```bash
+   dist/pelican-server_*/pelican-server serve --config ~/fed/pelican.yaml --module director,registry,origin,cache
+   ```
+
+   As they start, the servers log errors, such as ones about the MaxMind GeoIP database and incomplete registrations. These errors do not stop the federation from serving objects.
+
+1. In another terminal, download the object through the federation:
+
+   ```bash
+   dist/pelican_*/pelican object get --config ~/fed/pelican.yaml pelican://localhost:8444/test/hello.txt ~/fed/hello-copy.txt
+   cat ~/fed/hello-copy.txt
+   ```
+
+   The director redirects the client to the cache, which fetches the object from the origin.
+
+The documentation describes how to configure each server: an [origin](https://docs.pelicanplatform.org/federating-your-data/origin), a [cache](https://docs.pelicanplatform.org/operating-a-federation/cache), a [director](https://docs.pelicanplatform.org/operating-a-federation/director), and a [registry](https://docs.pelicanplatform.org/operating-a-federation/registry).
+
+## Generated Files
+
+Generators produce some files from others. The CLI reference in `docs/app/commands-reference/` comes from the Cobra commands. Every other generated file that Git tracks starts with a `// Code generated` comment. Edit the inputs, not the generated files. After changing an input, run these commands, and commit the files that they change:
 
 ```bash
-$ git commit --no-verify -m "WIP: work in progress"
+go generate ./...
+go generate -tags client ./cmd/...
+go generate -tags server ./cmd/...
 ```
 
-However, this is not recommended for final commits as the CI/CD pipeline runs similar checks and will fail if issues are detected.
+The `cmd` package builds only with the `client` or `server` build tag, so `go generate ./...` alone skips it. In CI, the "Check Go Generate Has Been Run" workflow fails if these commands change any file.
 
-## Ask for Help
+## Testing
 
-The best way to reach us with a question when contributing is to ask on the original github issue. Please comment your question under the issue and feel free to ping the author of the issue as you needed!
+### Running Go Tests
 
-This guideline is based on [CNCF contributing guideline template](https://github.com/cncf/project-template/blob/main/CONTRIBUTING.md) and [Auth0 Contributing Guideline](https://github.com/auth0/open-source-template/blob/master/GENERAL-CONTRIBUTING.md).
+Some tests build only with the `client` or `server` build tag, so `go test ./...` skips them. CI tests with each tag separately, because the client's and the servers' builds use one tag each. Code can pass with both tags at once and fail with only one. Before opening a pull request, run the tests with each tag:
+
+```bash
+go test -tags client ./...
+go test -tags server $(.github/scripts/go-test/build_tag_packages.sh)
+```
+
+For pull requests, CI adds `-short`, which skips the tests that call `test_utils.SkipIfShort`.
+
+### Writing Go Tests
+
+- Make each test independent of the others. Write files only under `t.TempDir()`. Reset the global configuration before and after each test that changes it. For example, call `server_utils.ResetTestState()` at the start of the test, and pass it to `t.Cleanup`.
+- Do not add a `time.Sleep` call that waits for a condition, because such waits make tests unreliable. Wait for the condition itself, such as with `require.Eventually`.
+- By default, let each test run in every CI run. Call `test_utils.SkipIfShort(t, "reason")` as a test's first statement only when one of these holds:
+  - The test needs a backend, service, or privilege that the runners for pull requests should not depend on, such as HTCondor, rclone, MinIO, or root.
+  - The test's measured time outweighs what it checks. The JUnit artifacts of CI runs give each test's time.
+
+### Running Web UI Tests
+
+To run the web UI's Jest tests, run `pnpm test` in `web_ui/frontend/`. The Playwright tests in `web_ui/frontend/e2e/` run against a running Pelican server. [`web_ui/frontend/e2e/README.md`](web_ui/frontend/e2e/README.md) explains how to run them.
+
+## Checks
+
+Pelican uses pre-commit to check each commit. The hooks for golangci-lint and the web UI's formatter run before each push instead. To install the hooks for commits and pushes, run these commands in your clone:
+
+```bash
+pre-commit install
+pre-commit install --hook-type pre-push
+```
+
+Before opening a pull request, run the checks that apply to your change:
+
+- To lint the Go code, run:
+
+  ```bash
+  GOOS=linux golangci-lint run
+  GOOS=darwin golangci-lint run --disable=unused
+  GOOS=windows golangci-lint run --disable=unused
+  ```
+
+  The `darwin` and `windows` runs disable the `unused` linter, because a symbol's only callers can be in files that the build for one platform excludes.
+
+  To fix the formatting problems that golangci-lint reports, run `golangci-lint fmt`.
+
+- To check the web UI's formatting, run:
+
+  ```bash
+  pnpm --dir web_ui/frontend run format
+  ```
+
+  To fix the formatting, run `pnpm --dir web_ui/frontend run format:fix`.
+
+- To check `docs/parameters.yaml`, run:
+
+  ```bash
+  python3 .github/scripts/validate-parameters/main.py
+  ```
+
+  The script needs the Python packages in `.github/scripts/validate-parameters/requirements.txt`.
+
+CI runs the commit hooks and each of these checks on every pull request.
+
+## Pull Requests
+
+To decide what belongs in a pull request, use these guidelines and your judgment:
+
+- Address one concern. Avoid changing the formatting or style of code that the concern does not involve. Cleaning up the code around a changed line can be appropriate, but the farther code is from the change, the less likely that is.
+- Fix the root cause of a problem, not its symptoms. Consider whether a bug belongs to a class of bugs that one fix can prevent. For example, passing a configuration parameter's name as a string allows a typo in the name. The typed parameters in the `param` package turn such a typo into a compile error.
+
+Each pull request must follow these rules:
+
+- Link the issue that the pull request resolves, so that merging the pull request closes the issue.
+- Make each commit a well-defined, well-scoped change.
+- Add or update tests for the functionality that you fix or change.
+- Update the documentation that the change affects. Most of it is in `docs/`.
+
+If no one reviews your pull request within a week, ask a core contributor for a review in a comment on it.
+
+### Pull Requests That Change the Container Images
+
+A change to the packages that `images/Dockerfile` installs in the container images takes two pull requests: one that changes the packages, and one with the changes that depend on them, such as changes to code. CI tests each pull request in the `pelican-test` image from the most recent push to `main`, so a pull request cannot test the packages that it changes.
+
+Before opening the pull requests, test the two changes together on your fork. [`.github/workflows/README.md`](.github/workflows/README.md#forks) explains how to set up a fork to build and test its own images.
+
+## About This Guide
+
+The first version of this guide adapted the [CNCF contributing guideline template](https://github.com/cncf/project-template/blob/main/CONTRIBUTING.md) and the [Auth0 contributing guideline](https://github.com/auth0/open-source-template/blob/master/GENERAL-CONTRIBUTING.md).

@@ -76,4 +76,15 @@ The rule limits how a failed tag build can be re-run:
 
 ## Forks
 
-Forks listed in `.github/scripts/container-images/config.sh` behave as this repo does, but with their own repos. A fork with a CI repo pushes images built off of `main` and off of semver tags, and creates draft releases. A fork that also has a release repo can promote images, so that it can test the whole process. See "Pull Requests that Modify Pelican's Dependencies" in [CONTRIBUTING.md](../../CONTRIBUTING.md#pull-requests-that-modify-pelicans-dependencies) for the setup.
+Forks listed in `.github/scripts/container-images/config.sh` behave as this repo does, but with their own repos. A fork with a CI repo pushes images built off of `main` and off of semver tags, and creates draft releases. A fork that also has a release repo can promote images, so that it can test the whole process.
+
+To test changes that depend on the container images, such as the two pull requests that a change to the images' packages takes, set up your fork this way. [`CONTRIBUTING.md`](../../CONTRIBUTING.md#pull-requests-that-change-the-container-images) explains why such a change takes two pull requests. The setup needs a CI repo on a registry where you can push and pull images, and a robot account there with the same privileges. Give GitHub Actions the robot account's credentials, not your own. Then:
+
+1. Enable GitHub Actions on the fork. They are disabled on forks by default.
+1. In `config.sh`, add the fork with its `CI_REPO`. At their discretion, Pelican's core contributors can merge this change into this repo.
+1. On the fork, create the `harbor-ci` environment, with the robot account's credentials as its secrets, as the table in [Required Repository Configuration](#required-repository-configuration) describes. If the CI repo does not allow anonymous pulls, also create `harbor-pull`, preferably with credentials that can only pull.
+1. Push a semver tag to the fork, on a branch that holds all of the changes to test. `build-and-test.yml` pushes the tag's images to the CI repo, and `release.yml` creates a draft release.
+1. Review the tag's workflow runs.
+1. When done, delete the fork's draft releases and their tags.
+
+To also test promotion, set the fork's `RELEASE_REPO`, on the same registry host as its `CI_REPO`, and create the `image-promotion` and `harbor-promote` environments.
