@@ -218,6 +218,7 @@ Each pull request must follow these rules:
 
 - Link the issue that the pull request resolves, so that merging the pull request closes the issue.
 - Make each commit a well-defined, well-scoped change.
+- Follow the conventions in [`CONVENTIONS.md`](CONVENTIONS.md).
 - Add or update tests for the functionality that you fix or change.
 - Update the documentation that the change affects. Most of it is in `docs/`.
 
