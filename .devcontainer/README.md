@@ -86,5 +86,5 @@ su - alice
 
 For detailed development setup and contribution guidelines, see:
 
-- [CONTRIBUTE.md](../CONTRIBUTE.md)
+- [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [Pelican Documentation](https://docs.pelicanplatform.org/)

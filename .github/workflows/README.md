@@ -76,4 +76,4 @@ The rule limits how a failed tag build can be re-run:
 
 ## Forks
 
-Forks listed in `.github/scripts/container-images/config.sh` behave as this repo does, but with their own repos. A fork with a CI repo pushes images built off of `main` and off of semver tags, and creates draft releases. A fork that also has a release repo can promote images, so that it can test the whole process. See "Pull Requests that Modify Pelican's Dependencies" in [CONTRIBUTE.md](../../CONTRIBUTE.md#pull-requests-that-modify-pelicans-dependencies) for the setup.
+Forks listed in `.github/scripts/container-images/config.sh` behave as this repo does, but with their own repos. A fork with a CI repo pushes images built off of `main` and off of semver tags, and creates draft releases. A fork that also has a release repo can promote images, so that it can test the whole process. See "Pull Requests that Modify Pelican's Dependencies" in [CONTRIBUTING.md](../../CONTRIBUTING.md#pull-requests-that-modify-pelicans-dependencies) for the setup.

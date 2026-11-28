@@ -286,7 +286,7 @@ The frontend uses pnpm, not npm; the version is pinned by the `packageManager` f
 
 ### Environment Setup
 
-Pelican uses Docker containers and VSCode Dev Containers for development. See [CONTRIBUTE.md](CONTRIBUTE.md) for detailed setup instructions.
+Pelican uses Docker containers and VSCode Dev Containers for development. See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup instructions.
 
 Key steps:
 
@@ -405,5 +405,5 @@ make validate-parameters
 - Main Repository: https://github.com/PelicanPlatform/pelican
 - Documentation: https://docs.pelicanplatform.org/
 - Website: https://pelicanplatform.org/
-- Contributing Guide: [CONTRIBUTE.md](CONTRIBUTE.md)
+- Contributing Guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Security Policy: [SECURITY.md](SECURITY.md)
